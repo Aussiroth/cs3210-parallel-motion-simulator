@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cmath>
 #include <vector> 
 using namespace std;
 
@@ -12,25 +13,62 @@ class Particle
             return buffer;
         }
 
-        Particle(int i, double x, double y, double vX, double vY) 
+        Particle(int i, double x, double y, double vX, double vY, int l) 
         {
             this -> i = i;
             this -> x = x;
             this -> y = y;
             this -> vX = vX;
             this -> vY = vY;
+	    this -> l = l;
         }
   
         // Data Members
-        int i; 
+        int i;
+	int l;
         double x;
         double y;
         double vX;
         double vY; 
 
         void move() {
-            x += vX;
-            y += vY;
+	    //check for x wall collisions
+	    //check for y wall collisions
+	    double xCollide = vX < 0 ? x/(0-vX) : ((double)l-x)/vX;
+	    double yCollide = vY < 0 ? y/(0-vY) : ((double)l-y)/vY;
+	    if (xCollide >= 1 && yCollide >= 1) {
+            	x += vX;
+            	y += vY;
+	    }
+	    else {
+	    	if (xCollide < yCollide) {
+		    x += xCollide * vX;
+		    y += xCollide * vY;
+		    vX = -vX;
+		    //after handling x collision, need to stop the ball at the edge of box if it collides with y too
+		    if (yCollide < 1) {
+		    	x += (yCollide-xCollide) * vX;
+			y += (yCollide-xCollide) * vY;
+		    }
+		    else {
+		    	x += (1-xCollide) * vX;
+			y += (1-xCollide) * vY;
+		    }
+		}
+		else {
+		    x += yCollide * vX;
+		    y += yCollide * vY;
+		    vY = -vY;
+		    if (xCollide < 1) {
+		    	x += (xCollide-yCollide) * vX;
+			y += (xCollide-yCollide) * vY;
+		    }
+		    else {
+		        x += (1-yCollide) * vX;
+			y += (1-yCollide) * vY;
+		    }
+		}
+	    }
         }
 }; 
 
@@ -56,7 +94,7 @@ int main ()
         count = scanf("%d %lf %lf %lf %lf", &index, &x, &y, &vX, &vY);
         if (count == EOF || count <= 0) break;
 
-        particles.push_back(Particle (index, x, y, vX, vY));
+        particles.push_back(Particle (index, x, y, vX, vY, l));
     }
     
     if (!command.compare("print"))
