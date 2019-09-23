@@ -138,7 +138,42 @@ class ParticleCollisionEvent: public CollisionEvent
         double time;
     
         void execute() {
-            
+			//move them to proper position first
+			first.x += time * first.vX;
+			first.y += time * first.vY;
+			second.x += time * second.vX;
+			second.y += time * second.vY;
+			
+			//perform collision here
+            //find normal vector
+			double normalX = first.x - second.x;
+			double normalY = first.y - second.y;
+			double normalMag = sqrt(pow(normalX, 2) + pow(normalY, 2));
+			normalX = normalX/normalMag; normalY = normalY/normalMag;
+			double tangentX = -normalY;
+			double tangentY = normalX;
+			
+			//compute velocity vectors wrt to normal and tangent
+			double vFirstNormal = normalX * first.vX + normalY * first.vY;
+			double vFirstTangent = tangentX * first.vX + tangentY * first.vY;
+			double vSecondNormal = normalX * second.vX + normalY * second.vY;
+			double vSecondTangent = tangentX * second.vX + tangentY * second.vY;
+			
+			//collision simply swaps velocities
+			vFirstNormal = vSecondNormal;
+			vSecondNormal = vFirstNormal;
+			
+			first.vX = vFirstNormal * normalX + vFirstTangent * tangentX;
+			first.vY = vFirstNormal * normalY + vFirstTangent * tangentY;
+			second.vX = vSecondNormal * normalX + vSecondTangent * tangentX;
+			second.vY = vSecondNormal * normalY + vSecondTangent * tangentY;
+			
+			//Continue to move them here
+			//TODO: check for wall collisions and stop the particle at wall if so
+			first.x += (1-time) * first.vX;
+			first.y += (1-time) * first.vY;
+			second.x += (1-time) * second.vX;
+			second.y += (1-time) * second.vY;
         }
 };
 
@@ -156,7 +191,9 @@ class NoCollisionEvent: public CollisionEvent
 {
     public:
         void execute() {
-            
+            //simply move the particle
+			first.x += first.vX;
+			first.y += first.vY;
         }
 };
 
