@@ -123,6 +123,44 @@ class JaggedMatrix
         }
 };
 
+class CollisionEvent 
+{
+    public:
+        Particle first;
+    
+        virtual void execute();
+};
+
+class ParticleCollisionEvent: public CollisionEvent
+{
+    public:
+        Particle second;
+        double time;
+    
+        void execute() {
+            
+        }
+};
+
+class WallCollisionEvent: public CollisionEvent
+{
+    public:
+        double time;
+
+        void execute() {
+            
+        }
+};
+
+class NoCollisionEvent: public CollisionEvent
+{
+    public:
+        void execute() {
+            
+        }
+};
+
+
 void moveParticlesParallel(vector<Particle> particles);
 double timeParticleCollision(Particle, Particle);
 double timeWallCollision(Particle);
