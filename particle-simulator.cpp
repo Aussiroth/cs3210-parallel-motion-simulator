@@ -76,7 +76,56 @@ class Particle
         }
 }; 
 
-double timeCollision(Particle, Particle);
+
+class JaggedMatrix
+{
+    public:
+        int length;
+        double **matrix;
+
+        JaggedMatrix(int i) 
+        {
+            this->length = i;
+            matrix = (double**) calloc(i, sizeof(double *));
+            for (int k = 0; k < i; ++k) 
+            {
+                matrix[k] = (double *) calloc(k+1, sizeof(double));
+            }
+        }
+
+        int get(int i, int j)
+        {
+            if (i < j) 
+            {
+                return matrix[j][i];
+            }
+            return matrix[i][j];
+        }
+
+        void put(int i, int j, double value)
+        {
+            if (i < j) 
+            {
+                matrix[j][i] = value;
+            } else {
+                matrix[i][j] = value;
+            }
+           
+        }
+
+        void destroy()
+        {
+            for (int k = 0; k < length; ++k)
+            {
+                free(matrix[k]);
+            }
+            free(matrix);
+        }
+};
+
+void moveParticlesParallel(vector<Particle> particles);
+double timeParticleCollision(Particle, Particle);
+double timeWallCollision(Particle);
 void performCollision(Particle&, Particle&);
 
 int main ()
@@ -84,7 +133,6 @@ int main ()
     string command; // simulator command
     cin >> n >> l >> r >> s >> command;
 
-    //
     vector<Particle> particles; 
     for (int i = 0; i < n; ++i)
     {
@@ -104,7 +152,7 @@ int main ()
 	in case to check function works*/
 	/*
 	cout << "Collision check between particle 0 and 1" << endl;
-	cout << timeCollision(particles[0], particles[1]) << endl;
+	cout << timeParticleCollision(particles[0], particles[1]) << endl;
     */
 	
     if (!command.compare("print"))
@@ -119,9 +167,10 @@ int main ()
         for (int i = 0; i < s; ++i)
         {
             cout << "Timestep " << i << endl;
+            moveParticlesParallel(particles);
             for (int j = 0; j < particles.size(); ++j)
             {
-                particles[j].move();
+                // particles[j].move();
                 cout << (string) particles[j] << endl;
             }
         }
@@ -129,9 +178,36 @@ int main ()
     return 0;
 }
 
+
+void moveParticlesParallel(vector<Particle> particles) 
+{
+    int n = particles.size();
+    JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
+    double wallCollisionTimes[n] = {};
+    // int minTimesIndex[n] = {};
+    // for (int i = 0; i < n; ++i) minTimesIndex[i] = -1;
+    // double taskCount[n] = {0};
+    
+    # pragma omp parallel for
+    for (int i = 0; i < n-1; ++i)
+    {
+        wallCollisionTimes[i] = timeWallCollision(particles[i]);
+        # pragma omp parallel for
+        for (int j = i+1; j < n-1; ++j)
+        {
+            double t = timeParticleCollision(particles[i], particles[j]);
+            particleCollisionTimes.put(i, j, t);
+            // getCollisions();
+        }
+    }
+    // free memory
+    particleCollisionTimes.destroy();
+}
+
 //Input: 2 Particles
 //Output: Returns time taken before collision occurs if they collide, negative value otherwise.
-double timeCollision(Particle first, Particle second) {
+double timeParticleCollision(Particle first, Particle second)
+{
 	
 	//a, b and c are as in the quadratic formula representation.
 	//t, the time taken for the 2 circles to touch, is the unknown variable we are solving for
@@ -152,9 +228,20 @@ double timeCollision(Particle first, Particle second) {
 	return solfirst;
 }
 
+//Input: 1 Particle
+//Output: Returns time taken before collision occurs if it collides with wall, negative value otherwise.
+double timeWallCollision(Particle particle)
+{
+	//check for x wall collisions
+    //check for y wall collisions
+    double xCollide = particle.vX < 0 ? particle.x/(0-particle.vX) : ((double)l-particle.x)/particle.vX;
+    double yCollide = particle.vY < 0 ? particle.y/(0-particle.vY) : ((double)l-particle.y)/particle.vY;
+}
+
 //Takes in 2 particles by reference, assumes they have been moved to a position of collision
 //Changes the velocities of the 2 particles as if it was a perfectly elastic collision of particles of equal mass.
-void performCollision(Particle& first, Particle& second) {
+void performCollision(Particle& first, Particle& second)
+{
 	//find normal vector
 	double normalX = first.x - second.x;
 	double normalY = first.y - second.y;
