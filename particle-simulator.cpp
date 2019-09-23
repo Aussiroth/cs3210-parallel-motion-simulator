@@ -38,9 +38,10 @@ class Particle
 			//check for y wall collisions
 			double xCollide = vX < 0 ? x/(0-vX) : ((double)l-x)/vX;
 			double yCollide = vY < 0 ? y/(0-vY) : ((double)l-y)/vY;
+			cout << x << " " << y << " " << vX << " " << vY << " " << xCollide << " " << yCollide << endl;
 			if (xCollide >= 1 && yCollide >= 1) {
-					x += vX;
-					y += vY;
+				x += vX;
+				y += vY;
 			}
 			else {
 				if (xCollide < yCollide) {
@@ -76,6 +77,7 @@ class Particle
 }; 
 
 double timeCollision(Particle, Particle);
+void performCollision(Particle&, Particle&);
 
 int main ()
 {
@@ -99,7 +101,8 @@ int main ()
     }
 	
 	/*try to check collision
-	in case to check function works
+	in case to check function works*/
+	/*
 	cout << "Collision check between particle 0 and 1" << endl;
 	cout << timeCollision(particles[0], particles[1]) << endl;
     */
@@ -112,7 +115,7 @@ int main ()
             
             cout << (string) particles[i] << endl;
         }
-
+		performCollision(particles[0], particles[1]);
         for (int i = 0; i < s; ++i)
         {
             cout << "Timestep " << i << endl;
@@ -147,4 +150,31 @@ double timeCollision(Particle first, Particle second) {
 	double solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
 	double solsecond = (-b+sqrt(b*b-4*a*c))/(2*a);
 	return solfirst;
+}
+
+//Takes in 2 particles by reference, assumes they have been moved to a position of collision
+//Changes the velocities of the 2 particles as if it was a perfectly elastic collision of particles of equal mass.
+void performCollision(Particle& first, Particle& second) {
+	//find normal vector
+	double normalX = first.x - second.x;
+	double normalY = first.y - second.y;
+	double normalMag = sqrt(pow(normalX, 2) + pow(normalY, 2));
+	normalX = normalX/normalMag; normalY = normalY/normalMag;
+	double tangentX = -normalY;
+	double tangentY = normalX;
+	
+	//compute velocity vectors wrt to normal and tangent
+	double vFirstNormal = normalX * first.vX + normalY * first.vY;
+	double vFirstTangent = tangentX * first.vX + tangentY * first.vY;
+	double vSecondNormal = normalX * second.vX + normalY * second.vY;
+	double vSecondTangent = tangentX * second.vX + tangentY * second.vY;
+	//collision simply changes normal velocities to be in opposite direction
+	
+	vFirstNormal = -vFirstNormal;
+	vSecondNormal = -vSecondNormal;
+	
+	first.vX = vFirstNormal * normalX + vFirstTangent * tangentX;
+	first.vY = vFirstNormal * normalY + vFirstTangent * tangentY;
+	second.vX = vSecondNormal * normalX + vSecondTangent * tangentX;
+	second.vY = vSecondNormal * normalY + vSecondTangent * tangentY;
 }
