@@ -5,7 +5,7 @@ using namespace std;
 
 int n, l, r, s;
 
-class Particle 
+class Particle
 { 
     // Access specifier 
     public: 
@@ -257,25 +257,32 @@ int main ()
 void moveParticlesParallel(vector<Particle> particles) 
 {
     int n = particles.size();
+    // time of particle-particle collisions
     JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
+    // time of particle-wall collisions
     double wallCollisionTimes[n] = {};
-    // int minTimesIndex[n] = {};
-    // for (int i = 0; i < n; ++i) minTimesIndex[i] = -1;
-    // double taskCount[n] = {0};
     
+    // calculate collision times
     # pragma omp parallel for
     for (int i = 0; i < n-1; ++i)
     {
         wallCollisionTimes[i] = timeWallCollision(particles[i]);
+
         # pragma omp parallel for
         for (int j = i+1; j < n-1; ++j)
         {
             double t = timeParticleCollision(particles[i], particles[j]);
             particleCollisionTimes.put(i, j, t);
-            // getCollisions();
         }
     }
-    // free memory
+
+    // TODO: create min heap for collisions
+
+
+    // TODO: process min heap of collisions
+
+
+    // TODO: free all memory
     particleCollisionTimes.destroy();
 }
 
