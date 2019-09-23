@@ -210,8 +210,8 @@ class WallCollisionEvent: public CollisionEvent
 			double xCollide = first.vX < 0 ? first.x/(0-first.vX) : ((double)first.l-first.x)/first.vX;
 			double yCollide = first.vY < 0 ? first.y/(0-first.vY) : ((double)first.l-first.y)/first.vY;
 			if (xCollide < yCollide) {
-				x += xCollide * vX;
-				y += xCollide * vY;
+				first.x += xCollide * first.vX;
+				first.y += xCollide * first.vY;
 				first.vX = -first.vX;
 				//after handling x collision, need to stop the ball at the edge of box if it collides with y too
 				if (yCollide < 1) {
