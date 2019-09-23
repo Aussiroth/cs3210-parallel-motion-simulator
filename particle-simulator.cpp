@@ -99,7 +99,7 @@ int main ()
     }
 	
 	/*try to check collision
-	in case to check function works LOL
+	in case to check function works
 	cout << "Collision check between particle 0 and 1" << endl;
 	cout << timeCollision(particles[0], particles[1]) << endl;
     */
@@ -130,6 +130,10 @@ int main ()
 //Output: Returns time taken before collision occurs if they collide, negative value otherwise.
 double timeCollision(Particle first, Particle second) {
 	
+	//a, b and c are as in the quadratic formula representation.
+	//t, the time taken for the 2 circles to touch, is the unknown variable we are solving for
+	//by taking difference in circle centres, setting an unknown t for collision time, and then taking distance moved in time t,
+	//we can solve for t such that the circle centers are <= 2r and therefore collide. 4r^2 is to solve for radius distance.
 	double c = pow((first.x-second.x), 2) + pow((first.y - second.y), 2) - 4*r*r;
 	double b = 2*((first.x - second.x)*(first.vX - second.vX) + (first.y - second.y)*(first.vY-second.vY));
 	double a = pow((first.vX-second.vX), 2) + pow((first.vY - second.vY), 2);
@@ -139,7 +143,7 @@ double timeCollision(Particle first, Particle second) {
 		return -100.0;
 	}
 	
-	//else if there is a solution
+	//else if there is a solution, the one with smaller value should be the main collision. Second value is after the 2 circles phase through each other
 	double solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
 	double solsecond = (-b+sqrt(b*b-4*a*c))/(2*a);
 	return solfirst;
