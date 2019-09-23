@@ -109,12 +109,86 @@ int main ()
         for (int i = 0; i < s; ++i)
         {
             cout << "Timestep " << i << endl;
+            moveParticlesParallel(particles);
             for (int j = 0; j < particles.size(); ++j)
             {
-                particles[j].move();
+                // particles[j].move();
                 cout << (string) particles[j] << endl;
             }
         }
     }
     return 0;
+}
+
+class JaggedMatrix
+{
+    public:
+        int length;
+        double **matrix;
+
+        JaggedMatrix(int i) 
+        {
+            this->length = i;
+            matrix = (double**) calloc(i, sizeof(double *));
+            for (int k = 0; k < i; ++k) 
+            {
+                matrix[k] = (double *) calloc(k+1, sizeof(double));
+            }
+        }
+
+        int get(int i, int j)
+        {
+            if (i < j) 
+            {
+                return matrix[j][i];
+            }
+            return matrix[i][j];
+        }
+
+        void put(int i, int j, double value)
+        {
+            if (i < j) 
+            {
+                matrix[j][i] = value;
+            } else {
+                matrix[i][j] = value;
+            }
+           
+        }
+
+        void destroy()
+        {
+            for (int k = 0; k < length; ++k)
+            {
+                free(matrix[k]);
+            }
+            free(matrix);
+        }
+};
+
+void moveParticlesParallel(vector<Particle> particles) 
+{
+    int n = particles.size();
+    JaggedMatrix collisionTimes = JaggedMatrix(n);
+    // int minTimesIndex[n] = {};
+    // for (int i = 0; i < n; ++i) minTimesIndex[i] = -1;
+    // double taskCount[n] = {0};
+    
+    # pragma omp parallel for
+    for (int i = 0; i < n-1; ++i)
+    {
+        # pragma omp parallel for
+        for (int j = i+1; j < n-1; ++j)
+        {
+            double t = timeCollision(particles[i], particles[j]);
+            collisionTimes.put(i, j, t);
+
+            // if (minTimesIndex[i] == -1 || collisionTimes.get(i, minTimesIndex[i]) > t) minTimesIndex[i] = j;
+            // if (minTimesIndex[j] == -1 || collisionTimes.get(minTimesIndex[j], j) > t) minTimesIndex[j] = i;
+
+
+        }
+    }
+
+    
 }
