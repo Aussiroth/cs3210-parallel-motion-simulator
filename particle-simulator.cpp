@@ -168,6 +168,11 @@ class ParticleCollisionEvent: public CollisionEvent
 			second.vX = vSecondNormal * normalX + vSecondTangent * tangentX;
 			second.vY = vSecondNormal * normalY + vSecondTangent * tangentY;
 			
+			if (first.vX == -0.0) first.vX = 0.0;
+			if (first.vY == -0.0) first.vY = 0.0;
+			if (second.vX == -0.0) second.vX = 0.0;
+			if (second.vY == -0.0) second.vY = 0.0;
+			
 			//Continue to move them here
 			//Check for wall collisions and stop the particle at wall if so
 			double timeToMove;
