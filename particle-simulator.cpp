@@ -432,8 +432,8 @@ double timeParticleCollision(Particle first, Particle second)
 	
 	//else if there is a solution, the one with smaller value should be the main collision. Second value is after the 2 circles phase through each other
 	double solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
-	double solsecond = (-b+sqrt(b*b-4*a*c))/(2*a);
-	return solfirst;
+	//double solsecond = (-b+sqrt(b*b-4*a*c))/(2*a);
+	return solfirst < 0 ? 0 : solfirst;
 }
 
 //Input: 1 Particle
