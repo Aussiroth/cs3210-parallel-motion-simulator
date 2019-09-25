@@ -201,6 +201,7 @@ class ParticleCollisionEvent: public CollisionEvent
 			second.vX = vSecondNormal * normalX + vSecondTangent * tangentX;
 			second.vY = vSecondNormal * normalY + vSecondTangent * tangentY;
 			
+			//eliminate negative 0s
 			if (first.vX == -0.0) first.vX = 0.0;
 			if (first.vY == -0.0) first.vY = 0.0;
 			if (second.vX == -0.0) second.vX = 0.0;
@@ -252,8 +253,8 @@ class WallCollisionEvent: public CollisionEvent
         void execute() {
             //check for x wall collisions
 			//check for y wall collisions
-			double xCollide = first.vX < 0 ? first.x/(0-first.vX) : ((double)first.l-first.x)/first.vX;
-			double yCollide = first.vY < 0 ? first.y/(0-first.vY) : ((double)first.l-first.y)/first.vY;
+			double xCollide = first.vX < 0 ? (first.x-r)/(0-first.vX) : ((double)first.l-first.x-r)/first.vX;
+			double yCollide = first.vY < 0 ? (first.y-r)/(0-first.vY) : ((double)first.l-first.y-r)/first.vY;
 			if (xCollide < yCollide) {
 				first.x += xCollide * first.vX;
 				first.y += xCollide * first.vY;
@@ -268,7 +269,16 @@ class WallCollisionEvent: public CollisionEvent
 					first.y += (1-xCollide) * first.vY;
 				}
 			}
-			//same as above but for y collision before x
+			//collision with corner of box reverses both
+			else if (xCollide == yCollide) {
+				first.x += xCollide * first.vX;
+				first.y += xCollide * first.vY;
+				first.vX = -first.vX;
+				first.vY = -first.vY;
+				first.x += (1-xCollide) * first.vX;
+				first.y += (1-xCollide) * first.vY;
+			}
+			//same as x collision but for y wall collision happening first
 			else {
 				first.x += yCollide * first.vX;
 				first.y += yCollide * first.vY;
@@ -279,8 +289,8 @@ class WallCollisionEvent: public CollisionEvent
 				}
 				else {
 					first.x += (1-yCollide) * first.vX;
+					first.y += (1-yCollide) * first.vY;
 				}
-				first.y += (1-yCollide) * first.vY;
 			}
         }
 };
