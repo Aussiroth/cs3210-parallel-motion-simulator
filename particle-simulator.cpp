@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cmath>
 #include <vector> 
+#include <algorithm>
 using namespace std;
 
 int n, l, r, s;
@@ -14,6 +15,8 @@ class Particle
             sprintf(buffer, "Particle %d: %.8lf %.8lf %.8lf %.8lf", i, x, y, vX, vY); 
             return buffer;
         }
+
+        Particle();
 
         Particle(int i, double x, double y, double vX, double vY, int l) 
         {
@@ -43,7 +46,8 @@ class Particle
 				x += vX;
 				y += vY;
 			}
-			else {
+			else 
+            {
 				if (xCollide < yCollide) {
 					x += xCollide * vX;
 					y += xCollide * vY;
@@ -73,6 +77,11 @@ class Particle
 						y += (1-yCollide) * vY;
 					}
 			}
+        }
+
+        int getIndex()
+        {
+            return this->i;
         }
 }; 
 
@@ -127,18 +136,42 @@ class CollisionEvent
 {
     public:
         Particle first;
-    
+        double time;
+
+        CollisionEvent(Particle first, double time)
+        {
+            this->first = first;
+            this->time = time;
+        }
+
         virtual void execute();
+
+        double getTime()
+        {
+            return this->time;
+        }
+
+        double getSmallestIndex()
+        {
+            return first.getIndex();
+        }
 };
 
 class ParticleCollisionEvent: public CollisionEvent
 {
     public:
         Particle second;
-        double time;
+
+        ParticleCollisionEvent(Particle first, Particle second, double time)
+        : CollisionEvent(first, time)
+        {
+            this->second = second;
+
+        }
     
-        void execute() {
-			//move them to proper position first
+        void execute() 
+        {
+            //move them to proper position first
 			first.x += time * first.vX;
 			first.y += time * first.vY;
 			second.x += time * second.vX;
@@ -201,13 +234,20 @@ class ParticleCollisionEvent: public CollisionEvent
 			}
 			second.x += timeToMove * second.vX;
 			second.y += timeToMove * second.vY;
-		}
+        }
+
+        double getSmallestIndex()
+        {
+            return first.getIndex() < second.getIndex() ? first.getIndex() : second.getIndex();
+        }
 };
 
 class WallCollisionEvent: public CollisionEvent
 {
     public:
-        double time;
+
+        WallCollisionEvent(Particle first, double time)
+        : CollisionEvent(first, time){}
 
         void execute() {
             //check for x wall collisions
@@ -245,16 +285,22 @@ class WallCollisionEvent: public CollisionEvent
         }
 };
 
-class NoCollisionEvent: public CollisionEvent
-{
-    public:
-        void execute() {
-            //simply move the particle
-			first.x += first.vX;
-			first.y += first.vY;
-        }
-};
+// class NoCollisionEvent: public CollisionEvent
+// {
+//     public:
+//         void execute() {
+//             //simply move the particle
+// 			first.x += first.vX;
+// 			first.y += first.vY;
+//         }
+// };
 
+struct collisionEventGreaterThan {
+    bool operator()(CollisionEvent a, CollisionEvent b) const {
+        if (a.getTime() == b.getTime()) return a.getSmallestIndex() > b.getSmallestIndex(); 
+        return a.getTime() > b.getTime();
+    }
+};
 
 void moveParticlesParallel(vector<Particle> particles);
 double timeParticleCollision(Particle, Particle);
@@ -316,32 +362,44 @@ void moveParticlesParallel(vector<Particle> particles)
 {
     int n = particles.size();
     // time of particle-particle collisions
-    JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
+    // JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
     // time of particle-wall collisions
-    double wallCollisionTimes[n] = {};
+    // double wallCollisionTimes[n] = {};
+
+    vector<CollisionEvent> events;
     
     // calculate collision times
     # pragma omp parallel for
     for (int i = 0; i < n-1; ++i)
     {
-        wallCollisionTimes[i] = timeWallCollision(particles[i]);
+        double wallCollisionTime = timeWallCollision(particles[i]);
+        if (wallCollisionTime < 1)
+        {
+            WallCollisionEvent event = WallCollisionEvent(particles[i], wallCollisionTime);
+            events.push_back(event);
+        }
 
         # pragma omp parallel for
         for (int j = i+1; j < n-1; ++j)
         {
-            double t = timeParticleCollision(particles[i], particles[j]);
-            particleCollisionTimes.put(i, j, t);
+            double particleCollisionTime = timeParticleCollision(particles[i], particles[j]);
+            if (particleCollisionTime >= 0 && particleCollisionTime < 1)
+            {
+                ParticleCollisionEvent event = ParticleCollisionEvent(particles[i],particles[j], particleCollisionTime);
+                events.push_back(event);
+            }
         }
     }
 
     // TODO: create min heap for collisions
-
+    make_heap(events.begin(), events.end(), collisionEventGreaterThan());
 
     // TODO: process min heap of collisions
-
+    bool map[n] = { false };
+    #pragma omp parallel
 
     // TODO: free all memory
-    particleCollisionTimes.destroy();
+    // particleCollisionTimes.destroy();
 }
 
 //Input: 2 Particles
