@@ -16,7 +16,16 @@ class Particle
             return buffer;
         }
 
-        Particle();
+        // Data Members
+        int i;
+		int l;
+        double x;
+        double y;
+        double vX;
+        double vY; 
+
+
+        Particle() {};
 
         Particle(int i, double x, double y, double vX, double vY, int l) 
         {
@@ -28,57 +37,7 @@ class Particle
 			this -> l = l;
         }
   
-        // Data Members
-        int i;
-		int l;
-        double x;
-        double y;
-        double vX;
-        double vY; 
-
-        void move() {
-			//check for x wall collisions
-			//check for y wall collisions
-			double xCollide = vX < 0 ? x/(0-vX) : ((double)l-x)/vX;
-			double yCollide = vY < 0 ? y/(0-vY) : ((double)l-y)/vY;
-			cout << x << " " << y << " " << vX << " " << vY << " " << xCollide << " " << yCollide << endl;
-			if (xCollide >= 1 && yCollide >= 1) {
-				x += vX;
-				y += vY;
-			}
-			else 
-            {
-				if (xCollide < yCollide) {
-					x += xCollide * vX;
-					y += xCollide * vY;
-					vX = -vX;
-					//after handling x collision, need to stop the ball at the edge of box if it collides with y too
-					if (yCollide < 1) {
-						x += (yCollide-xCollide) * vX;
-						y += (yCollide-xCollide) * vY;
-					}
-					else {
-						x += (1-xCollide) * vX;
-						y += (1-xCollide) * vY;
-					}
-				}
-				//same as above but for y collision before x
-				else {
-					x += yCollide * vX;
-					y += yCollide * vY;
-					vY = -vY;
-					if (xCollide < 1) {
-						x += (xCollide-yCollide) * vX;
-						y += (xCollide-yCollide) * vY;
-					}
-					else {
-						x += (1-yCollide) * vX;
-				}
-						y += (1-yCollide) * vY;
-					}
-			}
-        }
-
+        
         int getIndex()
         {
             return this->i;
@@ -111,7 +70,7 @@ class JaggedMatrix
             return matrix[i][j];
         }
 
-        void put(int i, int j, double value)
+        void set(int i, int j, double value)
         {
             if (i < j) 
             {
@@ -134,17 +93,27 @@ class JaggedMatrix
 
 class CollisionEvent 
 {
+    bool operator < (CollisionEvent other)
+    {
+        if (this->time == other.getTime()) return this->getSmallestIndex() > other.getSmallestIndex(); 
+        return this->time > other.getTime();
+    }
+
     public:
         Particle first;
         double time;
 
-        CollisionEvent(Particle first, double time)
+        CollisionEvent() {}
+
+        ~CollisionEvent() {}
+
+        CollisionEvent(Particle& first, double time)
         {
             this->first = first;
             this->time = time;
         }
 
-        virtual void execute();
+        virtual void execute() {};
 
         double getTime()
         {
@@ -160,13 +129,22 @@ class CollisionEvent
 class ParticleCollisionEvent: public CollisionEvent
 {
     public:
+        bool operator == (ParticleCollisionEvent other)
+        {
+            int firstIndex = this->first.getIndex();
+            int secondIndex = this->second.getIndex();
+            int otherFirstIndex = other.first.getIndex();
+            int otherSecondIndex = other.second.getIndex();
+            return (firstIndex == otherSecondIndex && secondIndex == otherFirstIndex) ||
+                    (firstIndex == otherFirstIndex && secondIndex == otherSecondIndex);
+        }
         Particle second;
 
-        ParticleCollisionEvent(Particle first, Particle second, double time)
+
+        ParticleCollisionEvent(Particle& first, Particle& second, double time)
         : CollisionEvent(first, time)
         {
             this->second = second;
-
         }
     
         void execute() 
@@ -247,7 +225,7 @@ class WallCollisionEvent: public CollisionEvent
 {
     public:
 
-        WallCollisionEvent(Particle first, double time)
+        WallCollisionEvent(Particle& first, double time)
         : CollisionEvent(first, time){}
 
         void execute() {
@@ -295,27 +273,24 @@ class WallCollisionEvent: public CollisionEvent
         }
 };
 
-// class NoCollisionEvent: public CollisionEvent
-// {
-//     public:
-//         void execute() {
-//             //simply move the particle
-// 			first.x += first.vX;
-// 			first.y += first.vY;
-//         }
-// };
+class NoCollisionEvent: public CollisionEvent
+{
+    public:
 
-struct collisionEventGreaterThan {
-    bool operator()(CollisionEvent a, CollisionEvent b) const {
-        if (a.getTime() == b.getTime()) return a.getSmallestIndex() > b.getSmallestIndex(); 
-        return a.getTime() > b.getTime();
-    }
+        NoCollisionEvent(Particle& first)
+        : CollisionEvent(first, 1.0)
+        {}
+
+        void execute() {
+            //simply move the particle
+			first.x += first.vX;
+			first.y += first.vY;
+        }
 };
 
-void moveParticlesParallel(vector<Particle> particles);
-double timeParticleCollision(Particle, Particle);
-double timeWallCollision(Particle);
-void performCollision(Particle&, Particle&);
+void moveParticlesParallel(vector<Particle>& particles);
+double timeParticleCollision(Particle&, Particle&);
+double timeWallCollision(Particle&);
 
 int main ()
 {
@@ -352,7 +327,7 @@ int main ()
             
             cout << (string) particles[i] << endl;
         }
-		performCollision(particles[0], particles[1]);
+		// performCollision(particles[0], particles[1]);
         for (int i = 0; i < s; ++i)
         {
             cout << "Timestep " << i << endl;
@@ -368,53 +343,114 @@ int main ()
 }
 
 
-void moveParticlesParallel(vector<Particle> particles) 
+void moveParticlesParallel(vector<Particle>& particles) 
 {
     int n = particles.size();
     // time of particle-particle collisions
-    // JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
+    JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
     // time of particle-wall collisions
-    // double wallCollisionTimes[n] = {};
+    double wallCollisionTimes[n] = {};
 
     vector<CollisionEvent> events;
     
     // calculate collision times
-    # pragma omp parallel for
-    for (int i = 0; i < n-1; ++i)
+    // # pragma omp parallel for
+    for (int i = 0; i < n; ++i)
     {
-        double wallCollisionTime = timeWallCollision(particles[i]);
-        if (wallCollisionTime < 1)
-        {
-            WallCollisionEvent event = WallCollisionEvent(particles[i], wallCollisionTime);
-            events.push_back(event);
-        }
+        wallCollisionTimes[i] = timeWallCollision(particles[i]);
 
-        # pragma omp parallel for
-        for (int j = i+1; j < n-1; ++j)
+        // # pragma omp parallel for
+        for (int j = i+1; j < n; ++j)
         {
             double particleCollisionTime = timeParticleCollision(particles[i], particles[j]);
-            if (particleCollisionTime >= 0 && particleCollisionTime < 1)
-            {
-                ParticleCollisionEvent event = ParticleCollisionEvent(particles[i],particles[j], particleCollisionTime);
-                events.push_back(event);
-            }
+            particleCollisionTimes.set(i, j, particleCollisionTime);
         }
     }
 
-    // TODO: create min heap for collisions
-    make_heap(events.begin(), events.end(), collisionEventGreaterThan());
+    // cout << "Collision times calculated :)" << endl;
+    for (int i = 0; i < n; ++ i) {
+        for (int j = 0; j < n; ++ j) {
+            cout << particleCollisionTimes.get(i, j) << " ";
+        }
+        cout << endl;
+    }
 
-    // TODO: process min heap of collisions
-    bool map[n] = { false };
-    #pragma omp parallel
+    CollisionEvent* found[n] = { nullptr };
+    int foundCount = 0;
+    while (foundCount != n)
+    {   
+        CollisionEvent temp[n];
+        // # pragma omp parallel for
+        for (int i = 0; i < n; ++i)
+        {   
+            if (found[i] != NULL) continue;
 
-    // TODO: free all memory
-    // particleCollisionTimes.destroy();
+            // first assume no collision
+            temp[i] = NoCollisionEvent(particles[i]);
+            
+            // check for particle-wall collision
+            if (wallCollisionTimes[i] < temp[i].getTime() && wallCollisionTimes[i] < 1)
+            {
+                temp[i] = WallCollisionEvent(particles[i], wallCollisionTimes[i]);
+            }
+
+            // check for particle-particle collision
+            for (int j = 0; j < n; ++j)
+            {
+                if (i == j) continue;
+
+                double time = particleCollisionTimes.get(i, j);
+                if (time > -1 && time < temp[i].getTime() && time < 1) {
+                    temp[i] = ParticleCollisionEvent(particles[i], particles[j], time);
+                }
+            }
+        }
+        
+        for (int i = 0; i < n; ++i)
+        {
+            if (found[i] != NULL) continue;
+            
+            // particle-particle collision
+            if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(&temp[i]))
+            {
+                int otherIndex = v->second.getIndex();
+                if (ParticleCollisionEvent* v2 = dynamic_cast<ParticleCollisionEvent*>(&temp[otherIndex]))
+                {
+                    if (*v == *v2) 
+                    {
+                        found[i] = &temp[i];
+                        ++foundCount;
+                    }
+                }
+                
+            }
+
+            // particle-wall collision
+            else if (WallCollisionEvent* v = dynamic_cast<WallCollisionEvent*>(&temp[i]))
+            {
+                found[i] = &temp[i];
+                ++foundCount;
+            }
+            
+            // no collision
+            else
+            {
+                found[i] = &temp[i];
+                ++foundCount;
+            }            
+        }
+    }
+
+    // # pragma omp parallel for
+    for (int i = 0; i < n; ++i)
+    {
+        (*found[i]).execute();
+    }
 }
 
 //Input: 2 Particles
 //Output: Returns time taken before collision occurs if they collide, negative value otherwise.
-double timeParticleCollision(Particle first, Particle second)
+double timeParticleCollision(Particle& first, Particle& second)
 {
 	
 	//a, b and c are as in the quadratic formula representation.
@@ -438,38 +474,10 @@ double timeParticleCollision(Particle first, Particle second)
 
 //Input: 1 Particle
 //Output: Returns time taken before collision occurs if it collides with wall, negative value otherwise.
-double timeWallCollision(Particle particle)
+double timeWallCollision(Particle& particle)
 {
 	//check for x wall, y wall collisions
     double xCollide = particle.vX < 0 ? particle.x/(0-particle.vX) : ((double)l-particle.x)/particle.vX;
     double yCollide = particle.vY < 0 ? particle.y/(0-particle.vY) : ((double)l-particle.y)/particle.vY;
 	return min(xCollide, yCollide);
-}
-
-//Takes in 2 particles by reference, assumes they have been moved to a position of collision
-//Changes the velocities of the 2 particles as if it was a perfectly elastic collision of particles of equal mass.
-void performCollision(Particle& first, Particle& second)
-{
-	//find normal vector
-	double normalX = first.x - second.x;
-	double normalY = first.y - second.y;
-	double normalMag = sqrt(pow(normalX, 2) + pow(normalY, 2));
-	normalX = normalX/normalMag; normalY = normalY/normalMag;
-	double tangentX = -normalY;
-	double tangentY = normalX;
-	
-	//compute velocity vectors wrt to normal and tangent
-	double vFirstNormal = normalX * first.vX + normalY * first.vY;
-	double vFirstTangent = tangentX * first.vX + tangentY * first.vY;
-	double vSecondNormal = normalX * second.vX + normalY * second.vY;
-	double vSecondTangent = tangentX * second.vX + tangentY * second.vY;
-	//collision simply changes normal velocities to be in opposite direction
-	
-	vFirstNormal = -vFirstNormal;
-	vSecondNormal = -vSecondNormal;
-	
-	first.vX = vFirstNormal * normalX + vFirstTangent * tangentX;
-	first.vY = vFirstNormal * normalY + vFirstTangent * tangentY;
-	second.vX = vSecondNormal * normalX + vSecondTangent * tangentX;
-	second.vY = vSecondNormal * normalY + vSecondTangent * tangentY;
 }
