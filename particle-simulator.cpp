@@ -169,8 +169,66 @@ class ParticleCollisionEvent: public CollisionEvent
 
         }
     
-        void execute() {
-            
+        void execute() 
+        {
+            //move them to proper position first
+			first.x += time * first.vX;
+			first.y += time * first.vY;
+			second.x += time * second.vX;
+			second.y += time * second.vY;
+			
+			//perform collision here
+            //find normal vector
+			double normalX = first.x - second.x;
+			double normalY = first.y - second.y;
+			double normalMag = sqrt(pow(normalX, 2) + pow(normalY, 2));
+			normalX = normalX/normalMag; normalY = normalY/normalMag;
+			double tangentX = -normalY;
+			double tangentY = normalX;
+			
+			//compute velocity vectors wrt to normal and tangent
+			double vFirstNormal = normalX * first.vX + normalY * first.vY;
+			double vFirstTangent = tangentX * first.vX + tangentY * first.vY;
+			double vSecondNormal = normalX * second.vX + normalY * second.vY;
+			double vSecondTangent = tangentX * second.vX + tangentY * second.vY;
+			
+			//collision simply swaps velocities
+			vFirstNormal = vSecondNormal;
+			vSecondNormal = vFirstNormal;
+			
+			first.vX = vFirstNormal * normalX + vFirstTangent * tangentX;
+			first.vY = vFirstNormal * normalY + vFirstTangent * tangentY;
+			second.vX = vSecondNormal * normalX + vSecondTangent * tangentX;
+			second.vY = vSecondNormal * normalY + vSecondTangent * tangentY;
+			
+			//Continue to move them here
+			//Check for wall collisions and stop the particle at wall if so
+			double timeToMove;
+			double xCollide = first.vX < 0 ? (first.x-r)/(0-first.vX) : ((double)l-r-first.x)/first.vX;
+			double yCollide = first.vY < 0 ? (first.y-r)/(0-first.vY) : ((double)l-r-first.y)/first.vY;
+			if (xCollide >= 1-time && yCollide >= 1-time) 
+			{
+				timeToMove = 1-time;
+			}
+			else
+			{
+				timeToMove = min(xCollide, yCollide);
+			}
+			first.x += timeToMove * first.vX;
+			first.y += timeToMove * first.vY;
+			
+			xCollide = first.vX < 0 ? (first.x-r)/(0-first.vX) : ((double)l-r-first.x)/first.vX;
+			yCollide = first.vY < 0 ? (first.y-r)/(0-first.vY) : ((double)l-r-first.y)/first.vY;
+			if (xCollide > 1-time && yCollide > 1-time) 
+			{
+				timeToMove = 1-time;
+			}
+			else 
+			{
+				timeToMove = min(xCollide, yCollide);
+			}
+			second.x += timeToMove * second.vX;
+			second.y += timeToMove * second.vY;
         }
 
         double getSmallestIndex()
@@ -187,7 +245,38 @@ class WallCollisionEvent: public CollisionEvent
         : CollisionEvent(first, time){}
 
         void execute() {
-            
+            //check for x wall collisions
+			//check for y wall collisions
+			double xCollide = first.vX < 0 ? first.x/(0-first.vX) : ((double)first.l-first.x)/first.vX;
+			double yCollide = first.vY < 0 ? first.y/(0-first.vY) : ((double)first.l-first.y)/first.vY;
+			if (xCollide < yCollide) {
+				first.x += xCollide * first.vX;
+				first.y += xCollide * first.vY;
+				first.vX = -first.vX;
+				//after handling x collision, need to stop the ball at the edge of box if it collides with y too
+				if (yCollide < 1) {
+					first.x += (yCollide-xCollide) * first.vX;
+					first.y += (yCollide-xCollide) * first.vY;
+				}
+				else {
+					first.x += (1-xCollide) * first.vX;
+					first.y += (1-xCollide) * first.vY;
+				}
+			}
+			//same as above but for y collision before x
+			else {
+				first.x += yCollide * first.vX;
+				first.y += yCollide * first.vY;
+				first.vY = -first.vY;
+				if (xCollide < 1) {
+					first.x += (xCollide-yCollide) * first.vX;
+					first.y += (xCollide-yCollide) * first.vY;
+				}
+				else {
+					first.x += (1-yCollide) * first.vX;
+				}
+				first.y += (1-yCollide) * first.vY;
+			}
         }
 };
 
@@ -195,7 +284,9 @@ class WallCollisionEvent: public CollisionEvent
 // {
 //     public:
 //         void execute() {
-            
+//             //simply move the particle
+// 			first.x += first.vX;
+// 			first.y += first.vY;
 //         }
 // };
 
@@ -334,10 +425,10 @@ double timeParticleCollision(Particle first, Particle second)
 //Output: Returns time taken before collision occurs if it collides with wall, negative value otherwise.
 double timeWallCollision(Particle particle)
 {
-	//check for x wall collisions
-    //check for y wall collisions
+	//check for x wall, y wall collisions
     double xCollide = particle.vX < 0 ? particle.x/(0-particle.vX) : ((double)l-particle.x)/particle.vX;
     double yCollide = particle.vY < 0 ? particle.y/(0-particle.vY) : ((double)l-particle.y)/particle.vY;
+	return min(xCollide, yCollide);
 }
 
 //Takes in 2 particles by reference, assumes they have been moved to a position of collision
