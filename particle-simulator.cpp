@@ -402,15 +402,15 @@ void moveParticlesParallel(vector<Particle*> particles)
             }
 
             // check for particle-particle collision
-            for (int j = i+1; j < n; ++j)
+            for (int j = 0; j < n; ++j)
             {
                 if (i == j) continue;
 
                 double time = particleCollisionTimes.get(i, j);
-                if (time > -1 && time < (*temp[i]).getTime() && time < 1) {
+                if (time > -1 && time < (*temp[i]).getTime() && time < 1 && found[j] == NULL) {
                     cout << "ParticleCollisionEvent instantiated for particle " << i << endl;
                     temp[i] = new ParticleCollisionEvent(particles[i], particles[j], time);
-                    cout << i << " collides with " << j << " at " << wallCollisionTimes[i] << endl;
+                    cout << i << " collides with " << j << " at " << particleCollisionTimes.get(i, j) << endl;
                 }
             }
         }
@@ -481,13 +481,12 @@ double timeParticleCollision(Particle& first, Particle& second)
 	
 	//check for solution
 	if (b*b-4*a*c < 0) {
-		return -100.0;
+		return 100000.0;
 	}
 	
 	//else if there is a solution, the one with smaller value should be the main collision. Second value is after the 2 circles phase through each other
 	double solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
-	double solsecond = (-b+sqrt(b*b-4*a*c))/(2*a);
-	return solfirst;
+	return solfirst < 0 ? 0 : solfirst;
 }
 
 //Input: 1 Particle
@@ -495,7 +494,7 @@ double timeParticleCollision(Particle& first, Particle& second)
 double timeWallCollision(Particle& particle)
 {
 	//check for x wall, y wall collisions
-    double xCollide = particle.vX < 0 ? particle.x/(0-particle.vX) : ((double)l-particle.x)/particle.vX;
-    double yCollide = particle.vY < 0 ? particle.y/(0-particle.vY) : ((double)l-particle.y)/particle.vY;
+    double xCollide = particle.vX < 0 ? (particle.x-r)/(0-particle.vX) : ((double)l-particle.x-r)/particle.vX;
+    double yCollide = particle.vY < 0 ? (particle.y-r)/(0-particle.vY) : ((double)l-particle.y-r)/particle.vY;
 	return min(xCollide, yCollide);
 }
