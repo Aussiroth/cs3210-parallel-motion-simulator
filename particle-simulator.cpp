@@ -2,6 +2,7 @@
 #include <cmath>
 #include <vector> 
 #include <algorithm>
+#include <chrono>
 using namespace std;
 
 int n, l, r, s;
@@ -149,6 +150,8 @@ class ParticleCollisionEvent: public CollisionEvent
    
         void execute() 
         {
+			if (first->getIndex() >= second->getIndex())
+				return;
             //move them to proper position first
 			first->x += time * first->vX;
 			first->y += time * first->vY;
@@ -171,8 +174,9 @@ class ParticleCollisionEvent: public CollisionEvent
 			double vSecondTangent = tangentX * second->vX + tangentY * second->vY;
 			
 			//collision simply swaps velocities
+			double temp = vFirstNormal;
 			vFirstNormal = vSecondNormal;
-			vSecondNormal = vFirstNormal;
+			vSecondNormal = temp;
 			
 			first->vX = vFirstNormal * normalX + vFirstTangent * tangentX;
 			first->vY = vFirstNormal * normalY + vFirstTangent * tangentY;
@@ -200,19 +204,6 @@ class ParticleCollisionEvent: public CollisionEvent
 			}
 			first->x += timeToMove * first->vX;
 			first->y += timeToMove * first->vY;
-			
-			xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-r-first->x)/first->vX;
-			yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-r-first->y)/first->vY;
-			if (xCollide > 1-time && yCollide > 1-time) 
-			{
-				timeToMove = 1-time;
-			}
-			else 
-			{
-				timeToMove = min(xCollide, yCollide);
-			}
-			second->x += timeToMove * second->vX;
-			second->y += timeToMove * second->vY;
         }
 
         double getSmallestIndex()
@@ -317,10 +308,11 @@ int main ()
         cout << "Input read: " << endl;
         for (int i = 0; i < particles.size(); ++i)
         {
-            
             cout << (string) *particles[i] << endl;
         }
     }
+	
+	auto start = std::chrono::high_resolution_clock::now();
 	
 	for (int i = 0; i < s; ++i)
 	{	
@@ -335,11 +327,17 @@ int main ()
 			}
 		}
 	}
+
+    auto finish = std::chrono::high_resolution_clock::now();
+	
 	cout << "Final particle positions and velocities" << endl;
 	for (int j = 0; j < particles.size(); ++j)
 	{
 		cout << (string) *particles[j] << endl;
 	}
+	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
+	printf("Time taken: %.5f s\n", timeTaken);
+	
     return 0;
 }
 
@@ -355,12 +353,12 @@ void moveParticlesParallel(vector<Particle*> particles)
     vector<CollisionEvent> events;
     
     // calculate collision times
-    // # pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < n; ++i)
     {
         wallCollisionTimes[i] = timeWallCollision(*particles[i]);
 
-        // # pragma omp parallel for
+        #pragma omp parallel for
         for (int j = i+1; j < n; ++j)
         {
             double particleCollisionTime = timeParticleCollision(*particles[i], *particles[j]);
@@ -368,13 +366,13 @@ void moveParticlesParallel(vector<Particle*> particles)
         }
     }
 
-    //cout << "Collision times calculated :)" << endl;
+    /*cout << "Collision times calculated :)" << endl;
     for (int i = 0; i < n; ++ i) {
         for (int j = 0; j < n; ++ j) {
-            //cout << particleCollisionTimes.get(i, j) << " ";
+            cout << particleCollisionTimes.get(i, j) << " ";
         }
-        //cout << endl;
-    }
+        cout << endl;
+    }*/
 
     /*for (int i = 0; i < n; ++ i) {
         cout << wallCollisionTimes[i] << " ";
@@ -386,7 +384,7 @@ void moveParticlesParallel(vector<Particle*> particles)
     while (foundCount != n)
     {   
         CollisionEvent* temp[n];
-        // # pragma omp parallel for
+        #pragma omp parallel for
         for (int i = 0; i < n; ++i)
         {   
             // first assume no collision
@@ -454,11 +452,11 @@ void moveParticlesParallel(vector<Particle*> particles)
             {
                 found[i] = temp[i];
                 ++foundCount;
-            }            
+            }
         }
     }
 
-    // # pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < n; ++i)
     {
         (*found[i]).execute();
