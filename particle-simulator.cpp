@@ -229,7 +229,6 @@ class WallCollisionEvent: public CollisionEvent
         : CollisionEvent(first, time){}
 
         void execute() {
-            cout << first->x << " " << first->y << endl;
             //check for x wall collisions
 			//check for y wall collisions
 			double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)first->l-first->x-r)/first->vX;
@@ -271,7 +270,6 @@ class WallCollisionEvent: public CollisionEvent
 					first->y += (1-yCollide) * first->vY;
 				}
 			}
-            cout << first->x << " " << first->y << endl;
         }
 };
 
@@ -314,13 +312,6 @@ int main ()
         particles.push_back(new Particle(index, x, y, vX, vY, l));
     }
 	
-	/*try to check collision
-	in case to check function works*/
-	/*
-	cout << "Collision check between particle 0 and 1" << endl;
-	cout << timeParticleCollision(particles[0], particles[1]) << endl;
-    */
-	
     if (!command.compare("print"))
     {
         cout << "Input read: " << endl;
@@ -347,7 +338,6 @@ int main ()
 	cout << "Final particle positions and velocities" << endl;
 	for (int j = 0; j < particles.size(); ++j)
 	{
-		// particles[j].move();
 		cout << (string) *particles[j] << endl;
 	}
     return 0;
@@ -378,18 +368,18 @@ void moveParticlesParallel(vector<Particle*> particles)
         }
     }
 
-    cout << "Collision times calculated :)" << endl;
+    //cout << "Collision times calculated :)" << endl;
     for (int i = 0; i < n; ++ i) {
         for (int j = 0; j < n; ++ j) {
-            cout << particleCollisionTimes.get(i, j) << " ";
+            //cout << particleCollisionTimes.get(i, j) << " ";
         }
-        cout << endl;
+        //cout << endl;
     }
 
-    for (int i = 0; i < n; ++ i) {
+    /*for (int i = 0; i < n; ++ i) {
         cout << wallCollisionTimes[i] << " ";
         cout << endl;
-    }
+    }*/
 
     CollisionEvent* found[n] = { nullptr };
     int foundCount = 0;
@@ -405,9 +395,9 @@ void moveParticlesParallel(vector<Particle*> particles)
             // check for particle-wall collision
             if (wallCollisionTimes[i] < (*temp[i]).getTime() && wallCollisionTimes[i] < 1)
             {
-                cout << "WallCollisionEvent instantiated for particle " << i << endl;
+                //cout << "WallCollisionEvent instantiated for particle " << i << endl;
                 temp[i] = new WallCollisionEvent(particles[i], wallCollisionTimes[i]);
-                cout << i << " collides at " << wallCollisionTimes[i] << endl;
+                //cout << i << " collides at " << wallCollisionTimes[i] << endl;
             }
 
             // check for particle-particle collision
@@ -417,17 +407,17 @@ void moveParticlesParallel(vector<Particle*> particles)
 
                 double time = particleCollisionTimes.get(i, j);
                 if (time > -1 && time < (*temp[i]).getTime() && time < 1 && found[j] == NULL) {
-                    cout << "ParticleCollisionEvent instantiated for particle " << i << endl;
+                    //cout << "ParticleCollisionEvent instantiated for particle " << i << endl;
                     temp[i] = new ParticleCollisionEvent(particles[i], particles[j], time);
-                    cout << i << " collides with " << j << " at " << particleCollisionTimes.get(i, j) << endl;
+                    //cout << i << " collides with " << j << " at " << particleCollisionTimes.get(i, j) << endl;
                 }
             }
         }
 
         // DEBUG print statements
-        cout << "temp array: ";
-        for (int i = 0; i < n; ++i) cout << (*temp[i]).time << " ";
-        cout << endl;
+        //cout << "temp array: ";
+        //for (int i = 0; i < n; ++i) cout << (*temp[i]).time << " ";
+        //cout << endl;
         
         for (int i = 0; i < n; ++i)
         {

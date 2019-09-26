@@ -10,6 +10,7 @@ print(num_particles)
 print(box_size)
 print(radius)
 print(timesteps)
+print("perf")
 
 random.seed(114514)
 pos = []
