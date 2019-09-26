@@ -329,18 +329,27 @@ int main ()
             
             cout << (string) *particles[i] << endl;
         }
-		// performCollision(particles[0], particles[1]);
-        for (int i = 0; i < s; ++i)
-        {
-            cout << "Timestep " << i << endl;
-            moveParticlesParallel(particles);
-            for (int j = 0; j < particles.size(); ++j)
-            {
-                // particles[j].move();
-                cout << (string) *particles[j] << endl;
-            }
-        }
     }
+	
+	for (int i = 0; i < s; ++i)
+	{	
+		moveParticlesParallel(particles);
+		if (!command.compare("print"))
+		{
+			cout << "Timestep " << i << endl;
+			for (int j = 0; j < particles.size(); ++j)
+			{
+				// particles[j].move();
+				cout << (string) *particles[j] << endl;
+			}
+		}
+	}
+	cout << "Final particle positions and velocities" << endl;
+	for (int j = 0; j < particles.size(); ++j)
+	{
+		// particles[j].move();
+		cout << (string) *particles[j] << endl;
+	}
     return 0;
 }
 
