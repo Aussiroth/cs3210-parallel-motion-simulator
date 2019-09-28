@@ -1,5 +1,6 @@
 echo > output.txt
-for i in {1..20}
+threads='1 2 4 8 10 12 16 20'
+for i in $threads
 do
 	export OMP_NUM_THREADS=$i
 	echo Thread count = $i >> output.txt
