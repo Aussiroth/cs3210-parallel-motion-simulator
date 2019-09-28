@@ -6,7 +6,7 @@ do
 	echo Thread count = $i >> output.txt
 	for j in {1..5}
 	do
-		./a.out < random.txt | grep "Time taken" >> output.txt
+		./a.out < random3000.txt | grep "Time taken" >> output.txt
 	done
 done
 
