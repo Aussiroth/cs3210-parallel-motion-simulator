@@ -3,9 +3,13 @@
 #include <vector> 
 #include <algorithm>
 #include <chrono>
+#include <random>
 using namespace std;
 
 int n, l, r, s;
+
+mt19937 rng;
+random_device rd;
 
 class Particle
 { 
@@ -288,8 +292,13 @@ int main ()
     string command; // simulator command
     cin >> n >> l >> r >> s >> command;
 
+	rng.seed(rd());
+	uniform_real_distribution<double> pos(r, l-r);
+	uniform_real_distribution<double> velocity((double)l/(8*r), (double)l/4);
+
     vector<Particle*> particles; 
-    for (int i = 0; i < n; ++i)
+	int scanned;
+    for (scanned = 0; scanned < n; ++scanned)
     {
         int index; 
         double x;
@@ -302,6 +311,14 @@ int main ()
 
         particles.push_back(new Particle(index, x, y, vX, vY, l));
     }
+	for (int j = scanned; j < n; j++)
+	{
+		double x = pos(rng);
+		double y = pos(rng);
+		double vX = velocity(rng);
+		double vY = velocity(rng);
+		particles.push_back(new Particle(j, x, y, vX, vY, l));
+	}
 	
     if (!command.compare("print"))
     {
@@ -312,7 +329,7 @@ int main ()
         }
     }
 	
-	auto start = std::chrono::high_resolution_clock::now();
+	auto start = chrono::high_resolution_clock::now();
 	
 	for (int i = 0; i < s; ++i)
 	{	
