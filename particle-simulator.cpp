@@ -13,7 +13,6 @@ random_device rd;
 
 class Particle
 { 
-    // Access specifier 
     public: 
         operator string() const { 
             char buffer [100];;
@@ -21,14 +20,11 @@ class Particle
             return buffer;
         }
 
-        // Data Members
         int i;
-		int l;
         double x;
         double y;
         double vX;
         double vY; 
-
 
         Particle() {};
 
@@ -39,10 +35,8 @@ class Particle
             this -> y = y;
             this -> vX = vX;
             this -> vY = vY;
-			this -> l = l;
         }
   
-        
         int getIndex()
         {
             return this->i;
@@ -283,7 +277,7 @@ class NoCollisionEvent: public CollisionEvent
         }
 };
 
-void moveParticlesParallel(vector<Particle*> particles);
+void moveParticles(vector<Particle*> particles);
 double timeParticleCollision(Particle&, Particle&);
 double timeWallCollision(Particle&);
 
@@ -333,13 +327,12 @@ int main ()
 	
 	for (int i = 0; i < s; ++i)
 	{	
-		moveParticlesParallel(particles);
+		moveParticles(particles);
 		if (!command.compare("print"))
 		{
 			cout << "Timestep " << i << endl;
 			for (int j = 0; j < particles.size(); ++j)
 			{
-				// particles[j].move();
 				cout << (string) *particles[j] << endl;
 			}
 		}
@@ -359,7 +352,7 @@ int main ()
 }
 
 
-void moveParticlesParallel(vector<Particle*> particles) 
+void moveParticles(vector<Particle*> particles) 
 {
     int n = particles.size();
     // time of particle-particle collisions
@@ -383,19 +376,6 @@ void moveParticlesParallel(vector<Particle*> particles)
         }
     }
 
-    /*cout << "Collision times calculated :)" << endl;
-    for (int i = 0; i < n; ++ i) {
-        for (int j = 0; j < n; ++ j) {
-            cout << particleCollisionTimes.get(i, j) << " ";
-        }
-        cout << endl;
-    }*/
-
-    /*for (int i = 0; i < n; ++ i) {
-        cout << wallCollisionTimes[i] << " ";
-        cout << endl;
-    }*/
-
     CollisionEvent* found[n] = { nullptr };
     int foundCount = 0;
     while (foundCount != n)
@@ -410,9 +390,7 @@ void moveParticlesParallel(vector<Particle*> particles)
             // check for particle-wall collision
             if (wallCollisionTimes[i] < (*temp[i]).getTime() && wallCollisionTimes[i] < 1)
             {
-                //cout << "WallCollisionEvent instantiated for particle " << i << endl;
                 temp[i] = new WallCollisionEvent(particles[i], wallCollisionTimes[i]);
-                //cout << i << " collides at " << wallCollisionTimes[i] << endl;
             }
 
             // check for particle-particle collision
@@ -422,23 +400,15 @@ void moveParticlesParallel(vector<Particle*> particles)
 
                 double time = particleCollisionTimes.get(i, j);
                 if (time > -1 && time < (*temp[i]).getTime() && time < 1 && found[j] == NULL) {
-                    //cout << "ParticleCollisionEvent instantiated for particle " << i << endl;
                     temp[i] = new ParticleCollisionEvent(particles[i], particles[j], time);
-                    //cout << i << " collides with " << j << " at " << particleCollisionTimes.get(i, j) << endl;
                 }
             }
         }
-
-        // DEBUG print statements
-        //cout << "temp array: ";
-        //for (int i = 0; i < n; ++i) cout << (*temp[i]).time << " ";
-        //cout << endl;
         
         for (int i = 0; i < n; ++i)
         {
             if (found[i] != NULL) continue;
 
-            // DEBUG print statements
             CollisionEvent* e = temp[i];
             
             // particle-particle collision
@@ -457,14 +427,7 @@ void moveParticlesParallel(vector<Particle*> particles)
                 
             }
 
-            // particle-wall collision
-            else if (WallCollisionEvent* v = dynamic_cast<WallCollisionEvent*>(e))
-            {
-                found[i] = temp[i];
-                ++foundCount;
-            }
-            
-            // no collision
+            // particle-wall collision or no collision
             else
             {
                 found[i] = temp[i];
@@ -480,8 +443,8 @@ void moveParticlesParallel(vector<Particle*> particles)
     }
 }
 
-//Input: 2 Particles
-//Output: Returns time taken before collision occurs if they collide, negative value otherwise.
+// input: 2 Particles
+// output: Returns time taken before collision occurs if they collide, negative value otherwise.
 double timeParticleCollision(Particle& first, Particle& second)
 {
 	
@@ -503,8 +466,8 @@ double timeParticleCollision(Particle& first, Particle& second)
 	return solfirst < 0 ? 0 : solfirst;
 }
 
-//Input: 1 Particle
-//Output: Returns time taken before collision occurs if it collides with wall, negative value otherwise.
+// input: 1 Particle
+// output: Returns time taken before collision occurs if it collides with wall, negative value otherwise.
 double timeWallCollision(Particle& particle)
 {
 	//check for x wall, y wall collisions
