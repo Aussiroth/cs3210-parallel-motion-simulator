@@ -23,7 +23,7 @@ CS3210 Parallel Computing AY19/20 Sem 1
 ```
 ## Instructions
 ### Compilation
-`g++ particle-simulator.cpp -fopenmp -std=c++`
+`g++ particle-simulator.cpp -fopenmp -std=c++11`
 
 ### Execution
 `./a.out < input/random1000.txt`
