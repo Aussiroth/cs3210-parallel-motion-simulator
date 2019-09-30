@@ -220,8 +220,8 @@ class WallCollisionEvent: public CollisionEvent
         void execute() {
             //check for x wall collisions
 			//check for y wall collisions
-			double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)first->l-first->x-r)/first->vX;
-			double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)first->l-first->y-r)/first->vY;
+			double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-first->x-r)/first->vX;
+			double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-first->y-r)/first->vY;
 			if (xCollide < yCollide) {
 				first->x += xCollide * first->vX;
 				first->y += xCollide * first->vY;
