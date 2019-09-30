@@ -17,7 +17,7 @@ class Particle
     public: 
         operator string() const { 
             char buffer [200];
-            snprintf(buffer, 200, "Particle %d: %.8lf %.8lf %.8lf %.8lf\nParticle Collisions: %d Wall collisions: %d", i, x, y, vX, vY, pColl, wColl); 
+            snprintf(buffer, 200, "%d %.8lf %.8lf %.8lf %.8lf %d %d", i, x, y, vX, vY, pColl, wColl); 
             return buffer;
         }
 
@@ -322,15 +322,6 @@ int main ()
 		particles.push_back(new Particle(j, x, y, vX, vY, l));
 	}
 	
-    if (!command.compare("print"))
-    {
-        cout << "Input read: " << endl;
-        for (int i = 0; i < particles.size(); ++i)
-        {
-            cout << (string) *particles[i] << endl;
-        }
-    }
-	
 	auto start = chrono::high_resolution_clock::now();
 	
 	for (int i = 0; i < s; ++i)
@@ -338,23 +329,21 @@ int main ()
 		moveParticles(particles);
 		if (!command.compare("print"))
 		{
-			cout << "Timestep " << i << endl;
 			for (int j = 0; j < particles.size(); ++j)
 			{
-				cout << (string) *particles[j] << endl;
+				cout << i << (string) *particles[j] << endl;
 			}
 		}
 	}
 
     auto finish = std::chrono::high_resolution_clock::now();
 	
-	cout << "Final particle positions and velocities" << endl;
 	for (int j = 0; j < particles.size(); ++j)
 	{
 		cout << (string) *particles[j] << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
-	printf("Time taken: %.5f s\n", timeTaken);
+	// printf("Time taken: %.5f s\n", timeTaken);
 	
     return 0;
 }
