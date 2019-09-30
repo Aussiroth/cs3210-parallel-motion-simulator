@@ -4,9 +4,12 @@
 #include <algorithm>
 #include <chrono>
 #include <random>
+#include <atomic>
 using namespace std;
 
 int n, l, r, s;
+int nParticleColl;
+atomic<int> nWallColl;
 
 mt19937 rng;
 random_device rd;
@@ -259,6 +262,7 @@ class WallCollisionEvent: public CollisionEvent
 					first->y += (1-yCollide) * first->vY;
 				}
 			}
+			nWallColl++;
         }
 };
 
@@ -289,7 +293,8 @@ int main ()
 	rng.seed(rd());
 	uniform_real_distribution<double> pos(r, l-r);
 	uniform_real_distribution<double> velocity((double)l/(8*r), (double)l/4);
-
+    nParticleColl = 0;
+    nWallColl = 0;
     vector<Particle*> particles; 
 	int scanned;
     for (scanned = 0; scanned < n; ++scanned)
@@ -345,6 +350,8 @@ int main ()
 	{
 		cout << (string) *particles[j] << endl;
 	}
+	cout << "Wall collisions: " << nWallColl << endl;
+	cout << "Particle collisions: " << nParticleColl << endl;
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	printf("Time taken: %.5f s\n", timeTaken);
 	
@@ -422,6 +429,7 @@ void moveParticles(vector<Particle*> particles)
                     {
                         found[i] = temp[i];
                         ++foundCount;
+                        if (i < otherIndex) nParticleColl++;
                     }
                 }
                 
