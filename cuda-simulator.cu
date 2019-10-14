@@ -5,12 +5,15 @@
 #include <chrono>
 #include <random>
 #include <atomic>
-using namespace std;
+#include <stdio.h>
 
-int n, l, r, s;
+#define NUM_STREAMS 2
+
+using namespace std;
 
 mt19937 rng;
 random_device rd;
+__managed__ int n, l, r, s;
 
 class Particle
 { 
@@ -286,11 +289,18 @@ class NoCollisionEvent: public CollisionEvent
         }
 };
 
-void moveParticles(vector<Particle*> particles);
-double timeParticleCollision(Particle&, Particle&);
-double timeWallCollision(Particle&);
+__managed__ double** particleCollisionTimes;
+__managed__ double* wallCollisionTimes;
+__managed__ Particle** particles;
+__managed__ CollisionEvent** found;
+__managed__ CollisionEvent** temp;
+cudaStream_t streams[NUM_STREAMS];
 
-int main ()
+__host__ void moveParticles(Particle** particles);
+__global__ void timeParticleCollision();
+__global__ void timeWallCollision();
+
+__host__ int main (void)
 {
     string command; // simulator command
     cin >> n >> l >> r >> s >> command;
@@ -298,7 +308,8 @@ int main ()
 	rng.seed(rd());
 	uniform_real_distribution<double> pos(r, l-r);
 	uniform_real_distribution<double> velocity((double)l/(8*r), (double)l/4);
-    vector<Particle*> particles; 
+    //vector<Particle*> particles; 
+    cudaMallocManaged(&particles, sizeof(Particle) * n);
 	int scanned;
     for (scanned = 0; scanned < n; ++scanned)
     {
@@ -311,7 +322,7 @@ int main ()
         count = scanf("%d %lf %lf %lf %lf", &index, &x, &y, &vX, &vY);
         if (count == EOF || count <= 0) break;
 
-        particles.push_back(new Particle(index, x, y, vX, vY, l));
+        particles[scanned] = new Particle(index, x, y, vX, vY, l);
     }
 	for (int j = scanned; j < n; j++)
 	{
@@ -319,17 +330,23 @@ int main ()
 		double y = pos(rng);
 		double vX = velocity(rng);
 		double vY = velocity(rng);
-		particles.push_back(new Particle(j, x, y, vX, vY, l));
+		particles[scanned] = new Particle(j, x, y, vX, vY, l);
 	}
-	
-	auto start = chrono::high_resolution_clock::now();
+
+
+    for (int i = 0; i < NUM_STREAMS; ++i) 
+    {
+        cudaStreamCreate(&streams[i]);
+    }
+
+    auto start = chrono::high_resolution_clock::now();
 	
 	for (int i = 0; i < s; ++i)
 	{	
 		moveParticles(particles);
 		if (!command.compare("print"))
 		{
-			for (int j = 0; j < particles.size(); ++j)
+			for (int j = 0; j < n; ++j)
 			{
 				cout << i << (string) *particles[j] << endl;
 			}
@@ -338,7 +355,7 @@ int main ()
 
     auto finish = std::chrono::high_resolution_clock::now();
 	
-	for (int j = 0; j < particles.size(); ++j)
+	for (int j = 0; j < n; ++j)
 	{
 		cout << (string) *particles[j] << endl;
 	}
@@ -349,36 +366,56 @@ int main ()
 }
 
 
-void moveParticles(vector<Particle*> particles) 
+__host__ void moveParticles(Particle** particles) 
 {
-    int n = particles.size();
-    // time of particle-particle collisions
-    JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
-    // time of particle-wall collisions
-    double wallCollisionTimes[n] = {};
-
-    vector<CollisionEvent> events;
-    
-    // calculate collision times
-    #pragma omp parallel for
+    cudaMallocManaged(&particleCollisionTimes, sizeof(double*) * n);
     for (int i = 0; i < n; ++i)
     {
-        wallCollisionTimes[i] = timeWallCollision(*particles[i]);
-
-        #pragma omp parallel for
-        for (int j = i+1; j < n; ++j)
-        {
-            double particleCollisionTime = timeParticleCollision(*particles[i], *particles[j]);
-            particleCollisionTimes.set(i, j, particleCollisionTime);
-        }
+        cudaMallocManaged(&particleCollisionTimes[i], sizeof(double) * n);
     }
+    cudaMallocManaged(&wallCollisionTimes, sizeof(double) * n);
+    
+    cudaMallocManaged(&found, sizeof(CollisionEvent) * n);
+    cudaMallocManaged(&temp, sizeof(CollisionEvent) * n);
 
-    CollisionEvent* found[n] = { nullptr };
+    for (int i = 0; i < n; ++i)
+    {
+        found[n] = nullptr;
+        temp[n] = nullptr;
+    }
+    // time of particle-particle collisions
+    // JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
+    // time of particle-wall collisions
+    // double wallCollisionTimes[n] = {};
+
+    // calculate collision times
+    // #pragma omp parallel for
+    timeWallCollision<<<(n-1)/64+1, 64>>>();
+    // timeWallCollision<<<(n-1)/64+1, 64, 0, streams[0]>>>();
+    dim3 threadsPerBlock(64, 64);
+    dim3 blocksPerGrid((n-1)/64 + 1, (n-1)/64 + 1);
+        
+    timeParticleCollision<<<blocksPerGrid, threadsPerBlock>>>();
+    // timeParticleCollision<<<blocksPerGrid, threadsPerBlock, 0, streams[1]>>>();
+
+    cudaDeviceSynchronize();
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            cout<< particleCollisionTimes[i][j] << " ";
+        }
+        cout << endl;
+    }
+ 
+    for (int j = 0; j < n; ++j) {
+        cout<< wallCollisionTimes[j] << " ";
+    }
+    cout << endl;
+
     int foundCount = 0;
     while (foundCount != n)
     {   
-        CollisionEvent* temp[n];
-        #pragma omp parallel for
+        // CollisionEvent* temp[n];
+        // #pragma omp parallel for
         for (int i = 0; i < n; ++i)
         {   
             // first assume no collision
@@ -395,7 +432,7 @@ void moveParticles(vector<Particle*> particles)
             {
                 if (i == j) continue;
 
-                double time = particleCollisionTimes.get(i, j);
+                double time = particleCollisionTimes[i][j];
                 if (time > -1 && time < (*temp[i]).getTime() && time < 1 && found[j] == NULL) {
                     temp[i] = new ParticleCollisionEvent(particles[i], particles[j], time);
                 }
@@ -441,33 +478,62 @@ void moveParticles(vector<Particle*> particles)
 
 // input: 2 Particles
 // output: Returns time taken before collision occurs if they collide, negative value otherwise.
-double timeParticleCollision(Particle& first, Particle& second)
+__global__ void timeParticleCollision()
 {
+	printf("TIME PARTICLE OCLLISION\n");
+    int firstIndex = blockIdx.x * blockDim.x + threadIdx.x;
+    int secondIndex = blockIdx.y * blockDim.y + threadIdx.y;
+    if (firstIndex >= n || secondIndex >= n) return;
+    else
+    {
+        Particle first = *particles[firstIndex];
+        // cout << threadIdx.x << " first: " << first << endl;
+        Particle second = *particles[secondIndex];
+        //cout << threadIdx.x << " second: " << second << endl;
+	    //a, b and c are as in the quadratic formula representation.
+	    //t, the time taken for the 2 circles to touch, is the unknown variable we are solving for
+	    //by taking difference in circle centres, setting an unknown t for collision time, and then taking distance moved in time t,
+	    //we can solve for t such that the circle centers are <= 2r and therefore collide. 4r^2 is to solve for radius distance.
+	    double c = pow((first.x-second.x), 2) + pow((first.y - second.y), 2) - 4*r*r;
+	    double b = 2*((first.x - second.x)*(first.vX - second.vX) + (first.y - second.y)*(first.vY-second.vY));
+	    double a = pow((first.vX-second.vX), 2) + pow((first.vY - second.vY), 2);
 	
-	//a, b and c are as in the quadratic formula representation.
-	//t, the time taken for the 2 circles to touch, is the unknown variable we are solving for
-	//by taking difference in circle centres, setting an unknown t for collision time, and then taking distance moved in time t,
-	//we can solve for t such that the circle centers are <= 2r and therefore collide. 4r^2 is to solve for radius distance.
-	double c = pow((first.x-second.x), 2) + pow((first.y - second.y), 2) - 4*r*r;
-	double b = 2*((first.x - second.x)*(first.vX - second.vX) + (first.y - second.y)*(first.vY-second.vY));
-	double a = pow((first.vX-second.vX), 2) + pow((first.vY - second.vY), 2);
-	
-	//check for solution
-	if (b*b-4*a*c < 0) {
-		return 100000.0;
-	}
-	
-	//else if there is a solution, the one with smaller value should be the main collision. Second value is after the 2 circles phase through each other
-	double solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
-	return solfirst < 0 ? 0 : solfirst;
+	    //check for solution
+        double solfirst;
+	    if (b*b-4*a*c < 0)
+        {
+		    solfirst = 100000.0;
+	    } 
+        else
+        {
+	        //else if there is a solution, the one with smaller value should be the main collision. Second value is after the 2 circles phase through each other
+	        solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
+	        solfirst = solfirst < 0 ? 0 : solfirst;
+        }
+        printf("%lf\n", solfirst);
+        particleCollisionTimes[first.i][second.i] = solfirst;
+        particleCollisionTimes[second.i][first.i] = solfirst;
+    }
 }
 
 // input: 1 Particle
 // output: Returns time taken before collision occurs if it collides with wall, negative value otherwise.
-double timeWallCollision(Particle& particle)
+__global__ void timeWallCollision()
 {
+	printf("TIME wall OCLLISION: ");
+	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+    printf("particleIndex: %d, n: %d\n", particleIndex, n);
+    if (particleIndex >=n) {
+        printf("invalid %d\n", particleIndex);
+        return;
+    }
+    else
+    {
+    Particle particle = *particles[particleIndex];
 	//check for x wall, y wall collisions
     double xCollide = particle.vX < 0 ? (particle.x-r)/(0-particle.vX) : ((double)l-particle.x-r)/particle.vX;
     double yCollide = particle.vY < 0 ? (particle.y-r)/(0-particle.vY) : ((double)l-particle.y-r)/particle.vY;
-	return min(xCollide, yCollide);
+	printf("partricle.i: %d\n", particle.i);
+    wallCollisionTimes[particle.i] = min(xCollide, yCollide);
+    }
 }
