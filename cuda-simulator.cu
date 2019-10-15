@@ -292,8 +292,8 @@ class NoCollisionEvent: public CollisionEvent
 __managed__ double** particleCollisionTimes;
 __managed__ double* wallCollisionTimes;
 __managed__ Particle* particles;
-__managed__ CollisionEvent** found;
-__managed__ CollisionEvent** temp;
+__managed__ CollisionEvent* found;
+__managed__ CollisionEvent* temp;
 cudaStream_t streams[NUM_STREAMS];
 
 __host__ void moveParticles(Particle* particles);
@@ -349,7 +349,7 @@ __host__ int main (void)
 		{
 			for (int j = 0; j < n; ++j)
 			{
-				cout << i << (string) particles[j] << endl;
+				cout << i << " " << (string) particles[j] << endl;
 			}
 		}
 	}
@@ -381,8 +381,8 @@ __host__ void moveParticles(Particle* particles)
 
     for (int i = 0; i < n; ++i)
     {
-        found[n] = nullptr;
-        temp[n] = nullptr;
+        found[n] = (CollisionEvent) NULL;
+        temp[n] = (CollisionEvent) NULL;
     }
     // time of particle-particle collisions
     // JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
@@ -390,14 +390,10 @@ __host__ void moveParticles(Particle* particles)
     // double wallCollisionTimes[n] = {};
 
     // calculate collision times
-    // #pragma omp parallel for
-    // timeWallCollision<<<(n-1)/64+1, 64>>>();
-    timeWallCollision<<<(n-1)/64+1, 64, 0, streams[0]>>>();
-    dim3 threadsPerBlock(64, 64);
-    dim3 blocksPerGrid((n-1)/64 + 1, (n-1)/64 + 1);
+    timeWallCollision<<<(n-1)/32+1, 32, 0, streams[0]>>>();
+    dim3 threadsPerBlock(32, 32, 1);
+    dim3 blocksPerGrid((n-1)/32 + 1, (n-1)/32 + 1);
         
-    cout << "HELLO" << endl;
-    // timeParticleCollision<<<blocksPerGrid, threadsPerBlock>>>();
     timeParticleCollision<<<blocksPerGrid, threadsPerBlock, 0, streams[1]>>>();
 
     cudaDeviceSynchronize();
@@ -482,17 +478,13 @@ __host__ void moveParticles(Particle* particles)
 // output: Returns time taken before collision occurs if they collide, negative value otherwise.
 __global__ void timeParticleCollision()
 {
-	printf("TIME PARTICLE OCLLISION\n");
-    /*
     int firstIndex = blockIdx.x * blockDim.x + threadIdx.x;
     int secondIndex = blockIdx.y * blockDim.y + threadIdx.y;
-    if (firstIndex >= n || secondIndex >= n) return;
+    if (firstIndex >= n || secondIndex >= n || firstIndex >= secondIndex) return;
     else
     {
         Particle first = particles[firstIndex];
-        // cout << threadIdx.x << " first: " << first << endl;
         Particle second = particles[secondIndex];
-        //cout << threadIdx.x << " second: " << second << endl;
 	    //a, b and c are as in the quadratic formula representation.
 	    //t, the time taken for the 2 circles to touch, is the unknown variable we are solving for
 	    //by taking difference in circle centres, setting an unknown t for collision time, and then taking distance moved in time t,
@@ -513,10 +505,10 @@ __global__ void timeParticleCollision()
 	        solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
 	        solfirst = solfirst < 0 ? 0 : solfirst;
         }
-        printf("%lf\n", solfirst);
+        printf("solfirst: %lf\n", solfirst);
         particleCollisionTimes[first.i][second.i] = solfirst;
         particleCollisionTimes[second.i][first.i] = solfirst;
-    }*/
+    }
 }
 
 // input: 1 Particle
