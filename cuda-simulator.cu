@@ -467,11 +467,13 @@ __host__ void moveParticles(Particle* particles)
         }
     }
 
-    #pragma omp parallel for
-    for (int i = 0; i < n; ++i)
+    executeParticleCollision<<<(particleCollisionsCount-1)/64+1, 64, 0, streams[0]>>>();
+    executeWallCollision<<<(wallCollisionsCount-1)/64+1, 64, 0, streams[1]>>>();
+    executeNoCollision<<<(n-1)/64+1, 64, 0, streams[1]>>>(); 
+    /*for (int i = 0; i < n; ++i)
     {
         (*found[i]).execute();
-    }
+    }*/
 }
 
 // input: 2 Particles
@@ -527,4 +529,31 @@ __global__ void timeWallCollision()
         double yCollide = particle.vY < 0 ? (particle.y-r)/(0-particle.vY) : ((double)l-particle.y-r)/particle.vY;
         wallCollisionTimes[particle.i] = min(xCollide, yCollide);
     }
+}
+
+__global__ void executeParticleCollision()
+{
+	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+	if (particleIndex < particleCollisionsCount)
+	{
+		particleCollisions[particleIndex].execute();
+	}
+}
+
+__global__ void executeWallCollision()
+{
+	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+	if (particleIndex < wallCollisionsCount)
+	{
+		wallCollisions[particleIndex].execute();
+	}
+}
+
+__global__ void executeNoCollision()
+{
+	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+	if (particleIndex < noCollisionsCount)
+	{
+		noCollisions[particleIndex].execute();
+	}
 }
