@@ -292,13 +292,27 @@ class NoCollisionEvent: public CollisionEvent
 __managed__ double** particleCollisionTimes;
 __managed__ double* wallCollisionTimes;
 __managed__ Particle* particles;
-__managed__ CollisionEvent* found;
+// __managed__ CollisionEvent* found;
+__managed__ int* found;
+
+__managed__ ParticleCollisionEvent* particleCollisions;
+__managed__ int particleCollisionsCount;
+
+__managed__ WallCollisionEvent* wallCollisions;
+__managed__ int wallCollisionsCount;
+
+__managed__ NoCollisionEvent* noCollisions;
+__managed__ int noCollisionsCount;
+
 __managed__ CollisionEvent* temp;
+
 cudaStream_t streams[NUM_STREAMS];
 
 __host__ void moveParticles(Particle* particles);
+__global__ void findEarliestCollision();
 __global__ void timeParticleCollision();
 __global__ void timeWallCollision();
+
 
 __host__ int main (void)
 {
@@ -376,18 +390,22 @@ __host__ void moveParticles(Particle* particles)
     }
     cudaMallocManaged(&wallCollisionTimes, sizeof(double) * n);
     
-    cudaMallocManaged(&found, sizeof(CollisionEvent) * n);
-    cudaMallocManaged(&temp, sizeof(CollisionEvent) * n);
+    cudaMallocManaged(&found, sizeof(int) * n);
+    for (int i = 0; i < n; ++i) found[i] = -1;
+    
+    cudaMallocManaged(&particleCollisions, sizeof(ParticleCollisionEvent) * n);
+    cudaMallocManaged((void**) &particleCollisionsCount, sizeof(int));
+    particleCollisionsCount = 0;
 
-    for (int i = 0; i < n; ++i)
-    {
-        found[n] = (CollisionEvent) NULL;
-        temp[n] = (CollisionEvent) NULL;
-    }
-    // time of particle-particle collisions
-    // JaggedMatrix particleCollisionTimes = JaggedMatrix(n);
-    // time of particle-wall collisions
-    // double wallCollisionTimes[n] = {};
+    cudaMallocManaged(&wallCollisions, sizeof(WallCollisionEvent) * n);
+    cudaMallocManaged((void**) &wallCollisionsCount, sizeof(int));
+    wallCollisionsCount = 0;
+
+    cudaMallocManaged(&noCollisions, sizeof(NoCollisionEvent) * n);
+    cudaMallocManaged((void**) &noCollisionsCount, sizeof(int));
+    noCollisionsCount = 0;
+
+    cudaMallocManaged(&temp, sizeof(CollisionEvent) * n);
 
     // calculate collision times
     timeWallCollision<<<(n-1)/32+1, 32, 0, streams[0]>>>();
@@ -412,57 +430,42 @@ __host__ void moveParticles(Particle* particles)
     int foundCount = 0;
     while (foundCount != n)
     {   
-        // CollisionEvent* temp[n];
-        // #pragma omp parallel for
-        for (int i = 0; i < n; ++i)
-        {   
-            // first assume no collision
-            temp[i] = new NoCollisionEvent(&particles[i]);
-            
-            // check for particle-wall collision
-            if (wallCollisionTimes[i] < (*temp[i]).getTime() && wallCollisionTimes[i] < 1)
-            {
-                temp[i] = new WallCollisionEvent(&particles[i], wallCollisionTimes[i]);
-            }
-
-            // check for particle-particle collision
-            for (int j = 0; j < n; ++j)
-            {
-                if (i == j) continue;
-
-                double time = particleCollisionTimes[i][j];
-                if (time > -1 && time < (*temp[i]).getTime() && time < 1 && found[j] == NULL) {
-                    temp[i] = new ParticleCollisionEvent(&particles[i], &particles[j], time);
-                }
-            }
-        }
         
+        findEarliestCollision<<<(n-1)/32+1,32>>>();
+
         for (int i = 0; i < n; ++i)
         {
-            if (found[i] != NULL) continue;
+            if (found[i] != -1) continue;
 
-            CollisionEvent* e = temp[i];
+            CollisionEvent* e = &temp[i];
             
             // particle-particle collision
             if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(e))
             {
-
                 int otherIndex = (*(*v).second).getIndex();
-                if (ParticleCollisionEvent* v2 = dynamic_cast<ParticleCollisionEvent*>(temp[otherIndex]))
+                if (ParticleCollisionEvent* v2 = dynamic_cast<ParticleCollisionEvent*>(&temp[otherIndex]))
                 {
-                    if (*v == *v2) 
+                    if (*v == *v2 && i < otherIndex) 
                     {
-                        found[i] = temp[i];
+                        found[i] = 0;
                         ++foundCount;
+                        particleCollisions[particleCollisionsCount++] = v;
                     }
                 }
-                
             }
-            // particle-wall collision or no collision
+            // particle-wall collision
+            else if(WallCollisionEvent* v = dynamic_cast<WallCollisionEvent*>(e))
+            {
+                found[i] = 0;
+                ++foundCount;
+                wallCollisions[wallCollisionsCount++] = v;
+            }
+            // no collision
             else
             {
-                found[i] = temp[i];
+                found[i] = 0;
                 ++foundCount;
+                noCollisions[noCollisionsCount++] = dynamic_cast<NoCollisionEvent*>(e);
             }
         }
     }
@@ -473,6 +476,32 @@ __host__ void moveParticles(Particle* particles)
         (*found[i]).execute();
     }
 }
+
+__global__ void findEarliestCollisions()
+{
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+        
+    // first assume no collision
+    temp[index] = new NoCollisionEvent(&particles[index]);
+            
+    // check for particle-wall collision
+    if (wallCollisionTimes[index] < (*temp[index]).getTime() && wallCollisionTimes[index] < 1 && found[j] == -1)
+    {
+        temp[index] = new WallCollisionEvent(&particles[index], wallCollisionTimes[index]);
+    }
+
+    // check for particle-particle collision
+    for (int j = index + 1; j < n; ++j)
+    {
+        double time = particleCollisionTimes[index][j];
+        
+        if (time > -1 && time < (*temp[index]).getTime() && time < 1 && found[j] == -1) {
+            temp[index] = new ParticleCollisionEvent(&particles[index], &particles[j], time);
+        }
+    }
+
+}
+
 
 // input: 2 Particles
 // output: Returns time taken before collision occurs if they collide, negative value otherwise.
