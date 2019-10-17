@@ -373,9 +373,9 @@ __host__ void moveParticles(Particle* particles)
 	// double wallCollisionTimes[n] = {};
 
 	// calculate collision times
-	timeWallCollision<<<(n-1)/32+1, 32, 0, streams[0]>>>();
-	dim3 threadsPerBlock(32, 32, 1);
-	dim3 blocksPerGrid((n-1)/32 + 1, (n-1)/32 + 1);
+	timeWallCollision<<<(n-1)/64+1, 64, 0, streams[0]>>>();
+	dim3 threadsPerBlock(16, 16, 1);
+	dim3 blocksPerGrid((n-1)/16 + 1, (n-1)/16 + 1);
 
 	timeParticleCollision<<<blocksPerGrid, threadsPerBlock, 0, streams[1]>>>();
 
