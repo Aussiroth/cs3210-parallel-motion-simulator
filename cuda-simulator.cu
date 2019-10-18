@@ -101,7 +101,7 @@ class JaggedMatrix
 
 class CollisionEvent 
 {
-    bool operator < (CollisionEvent other)
+    __host__ __device__ bool operator < (CollisionEvent other)
     {
         if (this->time == other.getTime()) return this->getSmallestIndex() > other.getSmallestIndex(); 
         return this->time > other.getTime();
@@ -109,13 +109,14 @@ class CollisionEvent
 
     public:
         Particle* first;
+        Particle* second;
         double time;
 
-        CollisionEvent() {}
+        __host__ __device__ CollisionEvent() {}
 
-        virtual ~CollisionEvent() {}
+        __host__ __device__ virtual ~CollisionEvent() {}
 
-        CollisionEvent(Particle* first, double time)
+        __host__ __device__ CollisionEvent(Particle* first, double time)
         {
             this->first = first;
             this->time = time;
@@ -123,12 +124,12 @@ class CollisionEvent
 
         virtual void execute() {};
 
-        double getTime()
+        __host__ __device__ double getTime()
         {
             return this->time;
         }
 
-        double getSmallestIndex()
+        __host__ __device__ double getSmallestIndex()
         {
             return (*first).getIndex();
         }
@@ -137,7 +138,7 @@ class CollisionEvent
 class ParticleCollisionEvent: public CollisionEvent
 {
     public:
-        bool operator == (ParticleCollisionEvent other)
+        __host__ __device__ bool operator == (ParticleCollisionEvent other)
         {
             int firstIndex = (*this->first).getIndex();
             int secondIndex = (*this->second).getIndex();
@@ -146,10 +147,9 @@ class ParticleCollisionEvent: public CollisionEvent
             return (firstIndex == otherSecondIndex && secondIndex == otherFirstIndex) ||
                     (firstIndex == otherFirstIndex && secondIndex == otherSecondIndex);
         }
-        Particle* second;
 
 
-        ParticleCollisionEvent(Particle* first, Particle* second, double time)
+        __host__ __device__ ParticleCollisionEvent(Particle* first, Particle* second, double time)
         : CollisionEvent(first, time)
         {
             this->second = second;
@@ -215,7 +215,7 @@ class ParticleCollisionEvent: public CollisionEvent
 			second->pColl++;
         }
 
-        double getSmallestIndex()
+        __host__ __device__ double getSmallestIndex()
         {
             return (*first).getIndex() < (*second).getIndex() ? (*first).getIndex() : (*second).getIndex();
         }
@@ -225,7 +225,7 @@ class WallCollisionEvent: public CollisionEvent
 {
     public:
 
-        WallCollisionEvent(Particle* first, double time)
+        __host__ __device__ WallCollisionEvent(Particle* first, double time)
         : CollisionEvent(first, time){}
 
         void execute() {
@@ -278,7 +278,7 @@ class NoCollisionEvent: public CollisionEvent
 {
     public:
 
-        NoCollisionEvent(Particle* first)
+        __host__ __device__ NoCollisionEvent(Particle* first)
         : CollisionEvent(first, 1.0)
         {}
 
@@ -295,13 +295,13 @@ __managed__ Particle* particles;
 // __managed__ CollisionEvent* found;
 __managed__ int* found;
 
-__managed__ ParticleCollisionEvent* particleCollisions;
+__managed__ ParticleCollisionEvent** particleCollisions;
 __managed__ int particleCollisionsCount;
 
-__managed__ WallCollisionEvent* wallCollisions;
+__managed__ WallCollisionEvent** wallCollisions;
 __managed__ int wallCollisionsCount;
 
-__managed__ NoCollisionEvent* noCollisions;
+__managed__ NoCollisionEvent** noCollisions;
 __managed__ int noCollisionsCount;
 
 __managed__ CollisionEvent* temp;
@@ -393,15 +393,15 @@ __host__ void moveParticles(Particle* particles)
     cudaMallocManaged(&found, sizeof(int) * n);
     for (int i = 0; i < n; ++i) found[i] = -1;
     
-    cudaMallocManaged(&particleCollisions, sizeof(ParticleCollisionEvent) * n);
+    cudaMallocManaged(&particleCollisions, sizeof(ParticleCollisionEvent*) * n);
     cudaMallocManaged((void**) &particleCollisionsCount, sizeof(int));
     particleCollisionsCount = 0;
 
-    cudaMallocManaged(&wallCollisions, sizeof(WallCollisionEvent) * n);
+    cudaMallocManaged(&wallCollisions, sizeof(WallCollisionEvent*) * n);
     cudaMallocManaged((void**) &wallCollisionsCount, sizeof(int));
     wallCollisionsCount = 0;
 
-    cudaMallocManaged(&noCollisions, sizeof(NoCollisionEvent) * n);
+    cudaMallocManaged(&noCollisions, sizeof(NoCollisionEvent*) * n);
     cudaMallocManaged((void**) &noCollisionsCount, sizeof(int));
     noCollisionsCount = 0;
 
@@ -426,13 +426,10 @@ __host__ void moveParticles(Particle* particles)
         cout<< wallCollisionTimes[j] << " ";
     }
     cout << endl;
-
     int foundCount = 0;
     while (foundCount != n)
     {   
-        
         findEarliestCollision<<<(n-1)/32+1,32>>>();
-
         for (int i = 0; i < n; ++i)
         {
             if (found[i] != -1) continue;
@@ -470,33 +467,37 @@ __host__ void moveParticles(Particle* particles)
         }
     }
 
-    #pragma omp parallel for
+    /* #pragma omp parallel for
     for (int i = 0; i < n; ++i)
     {
         (*found[i]).execute();
-    }
+    }*/
 }
 
-__global__ void findEarliestCollisions()
+__global__ void findEarliestCollision()
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
-        
+    
+    if (index >= n || found[index] != -1) return;
+    printf("here1");
     // first assume no collision
-    temp[index] = new NoCollisionEvent(&particles[index]);
+    temp[index] = NoCollisionEvent(&particles[index]);
+    printf("here2");
             
     // check for particle-wall collision
-    if (wallCollisionTimes[index] < (*temp[index]).getTime() && wallCollisionTimes[index] < 1 && found[j] == -1)
+    if (wallCollisionTimes[index] < temp[index].getTime() && wallCollisionTimes[index] < 1)
     {
-        temp[index] = new WallCollisionEvent(&particles[index], wallCollisionTimes[index]);
+        temp[index] = WallCollisionEvent(&particles[index], wallCollisionTimes[index]);
     }
+    printf("here3");
 
     // check for particle-particle collision
     for (int j = index + 1; j < n; ++j)
     {
         double time = particleCollisionTimes[index][j];
         
-        if (time > -1 && time < (*temp[index]).getTime() && time < 1 && found[j] == -1) {
-            temp[index] = new ParticleCollisionEvent(&particles[index], &particles[j], time);
+        if (time > -1 && time < temp[index].getTime() && time < 1) {
+            temp[index] = ParticleCollisionEvent(&particles[index], &particles[j], time);
         }
     }
 
