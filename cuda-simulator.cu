@@ -101,40 +101,91 @@ class JaggedMatrix
 
 class CollisionEvent 
 {
-    __host__ __device__ bool operator < (CollisionEvent other)
-    {
-        if (this->time == other.getTime()) return this->getSmallestIndex() > other.getSmallestIndex(); 
-        return this->time > other.getTime();
-    }
-
     public:
+        const static int WALL = 0;
+        const static int PARTICLE = 1;
+        const static int NONE = 2;
+        
         Particle* first;
         Particle* second;
         double time;
+        int type;
+    
+        __host__ __device__ bool operator == (CollisionEvent other)
+        {
+            int firstIndex = (*this->first).getIndex();
+            int otherFirstIndex = (*other.first).getIndex();
+            if (this->second != nullptr)
+            {
+                int secondIndex = (*this->second).getIndex();
+                int otherSecondIndex = (*other.second).getIndex();
+                return (firstIndex == otherSecondIndex && secondIndex == otherFirstIndex) ||
+                    (firstIndex == otherFirstIndex && secondIndex == otherSecondIndex);
+            }
+            return (firstIndex == otherFirstIndex);
+        }
+        
+        
+        __host__ __device__ bool operator < (CollisionEvent other)
+        {
+            if (this->time == other.getTime()) return this->getSmallestIndex() > other.getSmallestIndex(); 
+            return this->time > other.getTime();
+        }
 
         __host__ __device__ CollisionEvent() {}
 
         __host__ __device__ virtual ~CollisionEvent() {}
-
+        
+        // wall collision event
         __host__ __device__ CollisionEvent(Particle* first, double time)
         {
             this->first = first;
+            this->second = nullptr;
             this->time = time;
+            this->type = this->WALL;
+        }
+        
+        // particle collision event
+        __host__ __device__ CollisionEvent(Particle* first, Particle* second, double time)
+        {
+            this->first = first;
+            this->second = second;
+            this->time = time;
+            this->type = this->PARTICLE;
         }
 
-        virtual void execute() {};
+        // no collision event
+        __host__ __device__ CollisionEvent(Particle* first)
+        {
+            this->first = first;
+            this->second = nullptr;
+            this->time = 1.0;
+            this->type = this->NONE;
+        }
+        
+        // virtual void execute() {};
 
         __host__ __device__ double getTime()
         {
             return this->time;
         }
 
+        __host__ __device__ int getType()
+        {
+            return this->type;
+        }
+
         __host__ __device__ double getSmallestIndex()
         {
+            if (this->second != nullptr)
+            {
+                return (*first).getIndex() < (*second).getIndex() ? (*first).getIndex() : (*second).getIndex();
+            }
             return (*first).getIndex();
         }
 };
 
+/*
 class ParticleCollisionEvent: public CollisionEvent
 {
     public:
@@ -287,7 +338,7 @@ class NoCollisionEvent: public CollisionEvent
 			first->x += first->vX;
 			first->y += first->vY;
         }
-};
+};*/
 
 __managed__ double** particleCollisionTimes;
 __managed__ double* wallCollisionTimes;
@@ -295,13 +346,13 @@ __managed__ Particle* particles;
 // __managed__ CollisionEvent* found;
 __managed__ int* found;
 
-__managed__ ParticleCollisionEvent** particleCollisions;
+__managed__ CollisionEvent** particleCollisions;
 __managed__ int particleCollisionsCount;
 
-__managed__ WallCollisionEvent** wallCollisions;
+__managed__ CollisionEvent** wallCollisions;
 __managed__ int wallCollisionsCount;
 
-__managed__ NoCollisionEvent** noCollisions;
+__managed__ CollisionEvent** noCollisions;
 __managed__ int noCollisionsCount;
 
 __managed__ CollisionEvent* temp;
@@ -393,15 +444,15 @@ __host__ void moveParticles(Particle* particles)
     cudaMallocManaged(&found, sizeof(int) * n);
     for (int i = 0; i < n; ++i) found[i] = -1;
     
-    cudaMallocManaged(&particleCollisions, sizeof(ParticleCollisionEvent*) * n);
+    cudaMallocManaged(&particleCollisions, sizeof(CollisionEvent*) * n);
     cudaMallocManaged((void**) &particleCollisionsCount, sizeof(int));
     particleCollisionsCount = 0;
 
-    cudaMallocManaged(&wallCollisions, sizeof(WallCollisionEvent*) * n);
+    cudaMallocManaged(&wallCollisions, sizeof(CollisionEvent*) * n);
     cudaMallocManaged((void**) &wallCollisionsCount, sizeof(int));
     wallCollisionsCount = 0;
 
-    cudaMallocManaged(&noCollisions, sizeof(NoCollisionEvent*) * n);
+    cudaMallocManaged(&noCollisions, sizeof(CollisionEvent*) * n);
     cudaMallocManaged((void**) &noCollisionsCount, sizeof(int));
     noCollisionsCount = 0;
 
@@ -437,32 +488,34 @@ __host__ void moveParticles(Particle* particles)
             CollisionEvent* e = &temp[i];
             
             // particle-particle collision
-            if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(e))
+            if ((*e).getType() == CollisionEvent::PARTICLE)
+            // if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(e))
             {
-                int otherIndex = (*(*v).second).getIndex();
-                if (ParticleCollisionEvent* v2 = dynamic_cast<ParticleCollisionEvent*>(&temp[otherIndex]))
+                int otherIndex = (*(*e).second).getIndex();
+                if (temp[otherIndex].getType() == CollisionEvent::PARTICLE)
                 {
-                    if (*v == *v2 && i < otherIndex) 
+                    if (*e == temp[otherIndex] && i < otherIndex) 
                     {
                         found[i] = 0;
                         ++foundCount;
-                        particleCollisions[particleCollisionsCount++] = v;
+                        particleCollisions[particleCollisionsCount++] = e;
                     }
                 }
             }
             // particle-wall collision
-            else if(WallCollisionEvent* v = dynamic_cast<WallCollisionEvent*>(e))
+            else if ((*e).getType() == CollisionEvent::WALL)
+            //else if(WallCollisionEvent* v = dynamic_cast<WallCollisionEvent*>(e))
             {
                 found[i] = 0;
                 ++foundCount;
-                wallCollisions[wallCollisionsCount++] = v;
+                wallCollisions[wallCollisionsCount++] = e;
             }
             // no collision
             else
             {
                 found[i] = 0;
                 ++foundCount;
-                noCollisions[noCollisionsCount++] = dynamic_cast<NoCollisionEvent*>(e);
+                noCollisions[noCollisionsCount++] = e;
             }
         }
     }
@@ -479,17 +532,14 @@ __global__ void findEarliestCollision()
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     
     if (index >= n || found[index] != -1) return;
-    printf("here1");
     // first assume no collision
-    temp[index] = NoCollisionEvent(&particles[index]);
-    printf("here2");
+    temp[index] = CollisionEvent(&particles[index]);
             
     // check for particle-wall collision
     if (wallCollisionTimes[index] < temp[index].getTime() && wallCollisionTimes[index] < 1)
     {
-        temp[index] = WallCollisionEvent(&particles[index], wallCollisionTimes[index]);
+        temp[index] = CollisionEvent(&particles[index], wallCollisionTimes[index]);
     }
-    printf("here3");
 
     // check for particle-particle collision
     for (int j = index + 1; j < n; ++j)
@@ -497,7 +547,7 @@ __global__ void findEarliestCollision()
         double time = particleCollisionTimes[index][j];
         
         if (time > -1 && time < temp[index].getTime() && time < 1) {
-            temp[index] = ParticleCollisionEvent(&particles[index], &particles[j], time);
+            temp[index] = CollisionEvent(&particles[index], &particles[j], time);
         }
     }
 
@@ -535,7 +585,6 @@ __global__ void timeParticleCollision()
 	        solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
 	        solfirst = solfirst < 0 ? 0 : solfirst;
         }
-        printf("solfirst: %lf\n", solfirst);
         particleCollisionTimes[first.i][second.i] = solfirst;
         particleCollisionTimes[second.i][first.i] = solfirst;
     }
