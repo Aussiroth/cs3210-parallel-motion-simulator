@@ -112,11 +112,11 @@ class CollisionEvent
 		{
 			int firstIndex = (*this->first).getIndex();
 			int otherFirstIndex = (*other.first).getIndex();
-			if (this->second != nullptr)
+            if (this->second != nullptr)
 			{
 				int secondIndex = (*this->second).getIndex();
 				int otherSecondIndex = (*other.second).getIndex();
-				return (firstIndex == otherSecondIndex && secondIndex == otherFirstIndex) ||
+		        return (firstIndex == otherSecondIndex && secondIndex == otherFirstIndex) ||
 					(firstIndex == otherFirstIndex && secondIndex == otherSecondIndex);
 			}
 			return (firstIndex == otherFirstIndex);
@@ -219,7 +219,6 @@ __host__ int main (void)
 	uniform_real_distribution<double> velocity((double)l/(8*r), (double)l/4);
 	//vector<Particle*> particles; 
 	cudaError_t cudaStatus = cudaMallocManaged(&particles, sizeof(Particle) * n);
-	cout << cudaStatus << endl;
 	int scanned;
 	for (scanned = 0; scanned < n; ++scanned)
 	{
@@ -307,7 +306,7 @@ __host__ void moveParticles(Particle* particles)
 	timeParticleCollision<<<blocksPerGrid, threadsPerBlock, 0, streams[1]>>>();
 
 	cudaDeviceSynchronize();
-	for (int i = 0; i < n; ++i) {
+	/*for (int i = 0; i < n; ++i) {
 		for (int j = 0; j < n; ++j) {
 			cout<< particleCollisionTimes[i][j] << " ";
 		}
@@ -316,11 +315,12 @@ __host__ void moveParticles(Particle* particles)
 	for (int j = 0; j < n; ++j) {
 		cout<< wallCollisionTimes[j] << " ";
 	}
-	cout << endl;
+	cout << endl;*/
 	int foundCount = 0;
 	while (foundCount != n)
 	{  
 		findEarliestCollision<<<(n-1)/32+1,32>>>();
+	    cudaDeviceSynchronize();
 		for (int i = 0; i < n; ++i)
 		{
 			if (found[i] != -1) continue;
@@ -332,11 +332,13 @@ __host__ void moveParticles(Particle* particles)
 				int otherIndex = (*(*e).second).getIndex();
 				if (temp[otherIndex].getType() == CollisionEvent::PARTICLE)
 				{
-					if (*e == temp[otherIndex] && i < otherIndex) 
+					if ((*e) == temp[otherIndex] && i < otherIndex) 
 					{
 						found[i] = 0;
-						++foundCount;
+                        found[otherIndex] = 0;
+						foundCount += 2;
 						particleCollisions[particleCollisionsCount++] = e;
+                        cout << "particleCollision between " << i << " and " << otherIndex << endl;
 					}
 				}
 			}
@@ -347,6 +349,7 @@ __host__ void moveParticles(Particle* particles)
 				found[i] = 0;
 				++foundCount;
 				wallCollisions[wallCollisionsCount++] = e;
+                cout << "wallCollision for " << i << endl;
 			}
 			// no collision
 			else
@@ -354,6 +357,7 @@ __host__ void moveParticles(Particle* particles)
 				found[i] = 0;
 				++foundCount;
 				noCollisions[noCollisionsCount++] = e;
+                cout << "noCollision for " << i << endl;
 			}
 		}
 	}
@@ -382,9 +386,10 @@ __global__ void findEarliestCollision()
 	}
 
 	// check for particle-particle collision
-	for (int j = index + 1; j < n; ++j)
+	for (int j = 0; j < n; ++j)
 	{
-		double time = particleCollisionTimes[index][j];
+		if (index == j || found[j] != -1) continue;
+        double time = particleCollisionTimes[index][j];
 
 		if (time > -1 && time < temp[index].getTime() && time < 1) {
 			temp[index] = CollisionEvent(&particles[index], &particles[j], time);
@@ -513,7 +518,7 @@ __global__ void executeParticleCollision()
 __global__ void executeWallCollision()
 {
 	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
-	if (particleIndex < wallCollisionsCount)
+	/*if (particleIndex < wallCollisionsCount)
 	{
 		printf("reeeeeee\n");
 		Particle *first = e->first;
@@ -540,8 +545,7 @@ __global__ void executeWallCollision()
 		first->x += (min(1, laterTime)-earlierTime) * first->vX;	
 		first->y += (min(1, laterTime)-earlierTime) * first->vY;
 		first->wColl++;
-		*/
-	}
+	}*/
 }
 
 __global__ void executeNoCollision()
