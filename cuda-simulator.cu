@@ -217,7 +217,6 @@ __host__ int main (void)
 	rng.seed(rd());
 	uniform_real_distribution<double> pos(r, l-r);
 	uniform_real_distribution<double> velocity((double)l/(8*r), (double)l/4);
-	//vector<Particle*> particles; 
 	cudaError_t cudaStatus = cudaMallocManaged(&particles, sizeof(Particle) * n);
 	int scanned;
 	for (scanned = 0; scanned < n; ++scanned)
@@ -250,8 +249,8 @@ __host__ int main (void)
 
 	auto start = chrono::high_resolution_clock::now();
 	for (int i = 0; i < s; ++i)
-	{	
-		moveParticles(particles);
+	{
+		cout << i << endl;	
 		if (!command.compare("print"))
 		{
 			for (int j = 0; j < n; ++j)
@@ -259,6 +258,7 @@ __host__ int main (void)
 				cout << i << " " << (string) particles[j] << endl;
 			}
 		}
+		moveParticles(particles);
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
@@ -267,7 +267,7 @@ __host__ int main (void)
 		cout << (string) particles[j] << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
-	// printf("Time taken: %.5f s\n", timeTaken);
+	printf("Time taken: %.5f s\n", timeTaken);
 	return 0;
 }
 
@@ -319,8 +319,8 @@ __host__ void moveParticles(Particle* particles)
 	int foundCount = 0;
 	while (foundCount != n)
 	{  
-		findEarliestCollision<<<(n-1)/32+1,32>>>();
-	    cudaDeviceSynchronize();
+		findEarliestCollision<<<(n-1)/64+1,64>>>();
+		cudaDeviceSynchronize();
 		for (int i = 0; i < n; ++i)
 		{
 			if (found[i] != -1) continue;
@@ -335,10 +335,9 @@ __host__ void moveParticles(Particle* particles)
 					if ((*e) == temp[otherIndex] && i < otherIndex) 
 					{
 						found[i] = 0;
-                        found[otherIndex] = 0;
+						found[otherIndex] = 0;
 						foundCount += 2;
 						particleCollisions[particleCollisionsCount++] = e;
-                        cout << "particleCollision between " << i << " and " << otherIndex << endl;
 					}
 				}
 			}
@@ -349,7 +348,6 @@ __host__ void moveParticles(Particle* particles)
 				found[i] = 0;
 				++foundCount;
 				wallCollisions[wallCollisionsCount++] = e;
-                cout << "wallCollision for " << i << endl;
 			}
 			// no collision
 			else
@@ -357,14 +355,13 @@ __host__ void moveParticles(Particle* particles)
 				found[i] = 0;
 				++foundCount;
 				noCollisions[noCollisionsCount++] = e;
-                cout << "noCollision for " << i << endl;
 			}
 		}
 	}
-	cout << particleCollisionsCount << " " << wallCollisionsCount << " " << noCollisionsCount << endl;
 	executeParticleCollision<<<(particleCollisionsCount-1)/64+1, 64, 0, streams[0]>>>();
 	executeWallCollision<<<(wallCollisionsCount-1)/64+1, 64, 0, streams[1]>>>();
 	executeNoCollision<<<(n-1)/64+1, 64, 0, streams[1]>>>(); 
+	cudaDeviceSynchronize();	
 	/*for (int i = 0; i < n; ++i)
 	  {
 	  (*found[i]).execute();
@@ -427,7 +424,12 @@ __global__ void timeParticleCollision()
 		{
 			//else if there is a solution, the one with smaller value should be the main collision. Second value is after the 2 circles phase through each other
 			solfirst = (-sqrt(b*b-4*a*c)-b)/(2*a);
-			solfirst = solfirst < 0 ? 0 : solfirst;
+			if (solfirst < 0)
+			{
+				solfirst = (sqrt(b*b-4*a*c)-b)/(2*a);
+				if (solfirst > 0) solfirst = 0;
+				else solfirst = 100000.0;
+			}
 		}
 		particleCollisionTimes[first.i][second.i] = solfirst;
 		particleCollisionTimes[second.i][first.i] = solfirst;
@@ -448,7 +450,7 @@ __global__ void timeWallCollision()
 		//check for x wall, y wall collisions
 		double xCollide = particle.vX < 0 ? (particle.x-r)/(0-particle.vX) : ((double)l-particle.x-r)/particle.vX;
 		double yCollide = particle.vY < 0 ? (particle.y-r)/(0-particle.vY) : ((double)l-particle.y-r)/particle.vY;
-		wallCollisionTimes[particle.i] = min(xCollide, yCollide);
+		wallCollisionTimes[particle.i] = fmin(xCollide, yCollide);
 	}
 }
 
@@ -506,10 +508,23 @@ __global__ void executeParticleCollision()
 		}
 		else
 		{
-			timeToMove = min(xCollide, yCollide);
+			timeToMove = fmin(xCollide, yCollide);
 		}
 		first->x += timeToMove * first->vX;
 		first->y += timeToMove * first->vY;
+		
+		xCollide = second->vX < 0 ? (second->x-r)/(0-second->vX) : ((double)l-r-second->x)/second->vX;
+		yCollide = second->vY < 0 ? (second->y-r)/(0-second->vY) : ((double)l-r-second->y)/second->vY;
+		if (xCollide >= 1-time && yCollide >= 1-time) 
+		{
+			timeToMove = 1-time;
+		}
+		else
+		{
+			timeToMove = fmin(xCollide, yCollide);
+		}
+		second->x += timeToMove * second->vX;
+		second->y += timeToMove * second->vY;
 		first->pColl++;
 		second->pColl++;
 	}
@@ -518,17 +533,16 @@ __global__ void executeParticleCollision()
 __global__ void executeWallCollision()
 {
 	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
-	/*if (particleIndex < wallCollisionsCount)
+	if (particleIndex < wallCollisionsCount)
 	{
-		printf("reeeeeee\n");
+		CollisionEvent *e = wallCollisions[particleIndex];
 		Particle *first = e->first;
-		printf("wall collision index: %d\n", first->i);
 		//check for x wall collisions
 		//check for y wall collisions
 		double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-first->x-r)/first->vX;
 		double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-first->y-r)/first->vY;
-		int earlierTime = min(xCollide, yCollide);
-		int laterTime = max(xCollide, yCollide);
+		double earlierTime = fmin(xCollide, yCollide);
+		double laterTime = fmax(xCollide, yCollide);
 		first->x += earlierTime * first->vX;
 		first->y += earlierTime * first->vY;
 		//Reverse direction depending on which collision happens first
@@ -542,10 +556,10 @@ __global__ void executeWallCollision()
 		if (xCollide == yCollide) {
 			laterTime = 1;
 		}
-		first->x += (min(1, laterTime)-earlierTime) * first->vX;	
-		first->y += (min(1, laterTime)-earlierTime) * first->vY;
+		first->x += (fmin(1.0, laterTime)-earlierTime) * first->vX;	
+		first->y += (fmin(1.0, laterTime)-earlierTime) * first->vY;
 		first->wColl++;
-	}*/
+	}
 }
 
 __global__ void executeNoCollision()

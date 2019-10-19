@@ -1,2 +1,31 @@
 
-Thread count = 1
+1
+Time taken: 8.71175 s
+Time taken: 9.85172 s
+Time taken: 9.30306 s
+Time taken: 8.66315 s
+Time taken: 8.61548 s
+2
+Time taken: 19.68993 s
+Time taken: 19.71841 s
+Time taken: 21.21125 s
+Time taken: 19.45727 s
+Time taken: 20.04428 s
+3
+Time taken: 34.95423 s
+Time taken: 33.61498 s
+Time taken: 35.83278 s
+Time taken: 35.34212 s
+Time taken: 35.87650 s
+4
+Time taken: 49.81691 s
+Time taken: 52.52519 s
+Time taken: 53.87353 s
+Time taken: 52.91492 s
+Time taken: 54.48948 s
+5
+Time taken: 73.96249 s
+Time taken: 74.55630 s
+Time taken: 73.99467 s
+Time taken: 72.67544 s
+Time taken: 74.16967 s

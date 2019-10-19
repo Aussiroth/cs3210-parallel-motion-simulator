@@ -27,8 +27,8 @@ for i in range(0, num_particles):
                 acceptable = False
         if acceptable:
             break
-    vX = random.random() * (box_size/(4*radius) - box_size/(32*radius)) + box_size/(32*radius)
-    vY = random.random() * (box_size/(4*radius) - box_size/(32*radius)) + box_size/(32*radius)
+    vX = random.random() * (box_size/(32*radius) - box_size/(128*radius)) + box_size/(128*radius)
+    vY = random.random() * (box_size/(32*radius) - box_size/(128*radius)) + box_size/(128*radius)
     print(str(i) + " " + str(x) + " " + str(y) + " " + str(vX) + " " + str(vY))
     pos.append([x, y])
     
