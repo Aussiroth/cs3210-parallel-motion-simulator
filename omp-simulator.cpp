@@ -412,6 +412,7 @@ void moveParticles(vector<Particle*> particles)
 			// check for particle-wall collision
 			if (wallCollisionTimes[i] < (*temp[i]).getTime() && wallCollisionTimes[i] < 1)
 			{
+				delete(temp[i]);
 				temp[i] = new WallCollisionEvent(particles[i], wallCollisionTimes[i]);
 			}
 
@@ -422,6 +423,7 @@ void moveParticles(vector<Particle*> particles)
 
 				double time = particleCollisionTimes.get(i, j);
 				if (time > -1 && time < (*temp[i]).getTime() && time < 1 && found[j] == NULL) {
+					delete(temp[i]);
 					temp[i] = new ParticleCollisionEvent(particles[i], particles[j], time);
 				}
 			}
@@ -462,6 +464,7 @@ void moveParticles(vector<Particle*> particles)
 	{
 		(*found[i]).execute();
 	}
+	for (int i = 0; i < n; ++i) delete(found[i]);
 	particleCollisionTimes.destroy();
 }
 
