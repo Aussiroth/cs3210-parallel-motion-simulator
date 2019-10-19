@@ -29,7 +29,6 @@ class Particle
 		double y;
 		double vX;
 		double vY; 
-		
 		int pColl;
 		int wColl;
 
@@ -45,7 +44,6 @@ class Particle
 			this -> pColl = 0;
 			this -> wColl = 0;
 		}
-  
 		__device__ __host__ int getIndex()
 		{
 			return this->i;
@@ -86,7 +84,6 @@ class JaggedMatrix
 			} else {
 				matrix[i][j] = value;
 			}
-		   
 		}
 
 		void destroy()
@@ -215,7 +212,7 @@ class ParticleCollisionEvent: public CollisionEvent
 			first->y += time * first->vY;
 			second->x += time * second->vX;
 			second->y += time * second->vY;
-			
+
 			//perform collision here
 			//find normal vector
 			double normalX = first->x - second->x;
@@ -224,29 +221,24 @@ class ParticleCollisionEvent: public CollisionEvent
 			normalX = normalX/normalMag; normalY = normalY/normalMag;
 			double tangentX = -normalY;
 			double tangentY = normalX;
-			
 			//compute velocity vectors wrt to normal and tangent
 			double vFirstNormal = normalX * first->vX + normalY * first->vY;
 			double vFirstTangent = tangentX * first->vX + tangentY * first->vY;
 			double vSecondNormal = normalX * second->vX + normalY * second->vY;
 			double vSecondTangent = tangentX * second->vX + tangentY * second->vY;
-			
 			//collision simply swaps velocities
 			double temp = vFirstNormal;
 			vFirstNormal = vSecondNormal;
 			vSecondNormal = temp;
-			
 			first->vX = vFirstNormal * normalX + vFirstTangent * tangentX;
 			first->vY = vFirstNormal * normalY + vFirstTangent * tangentY;
 			second->vX = vSecondNormal * normalX + vSecondTangent * tangentX;
 			second->vY = vSecondNormal * normalY + vSecondTangent * tangentY;
-			
 			//eliminate negative 0s
 			if (first->vX == -0.0) first->vX = 0.0;
 			if (first->vY == -0.0) first->vY = 0.0;
 			if (second->vX == -0.0) second->vX = 0.0;
 			if (second->vY == -0.0) second->vY = 0.0;
-			
 			//Continue to move them here
 			//Check for wall collisions and stop the particle at wall if so
 			double timeToMove;
@@ -284,43 +276,23 @@ class WallCollisionEvent: public CollisionEvent
 			//check for y wall collisions
 			double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-first->x-r)/first->vX;
 			double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-first->y-r)/first->vY;
-			if (xCollide < yCollide) {
-				first->x += xCollide * first->vX;
-				first->y += xCollide * first->vY;
+			int earlierTime = min(xCollide, yCollide);
+			int laterTime = max(xCollide, yCollide);
+			first->x += earlierTime * first->vX;
+			first->y += earlierTime * first->vY;
+			//Reverse direction depending on which collision happens first
+			if (xCollide <= yCollide) {
 				first->vX = -first->vX;
-				//after handling x collision, need to stop the ball at the edge of box if it collides with y too
-				if (yCollide < 1) {
-					first->x += (yCollide-xCollide) * first->vX;
-					first->y += (yCollide-xCollide) * first->vY;
-				}
-				else {
-					first->x += (1-xCollide) * first->vX;
-					first->y += (1-xCollide) * first->vY;
-				}
-			}
-			//collision with corner of box reverses both
-			else if (xCollide == yCollide) {
-				first->x += xCollide * first->vX;
-				first->y += xCollide * first->vY;
-				first->vX = -first->vX;
+			}	
+			if (yCollide <= xCollide) {
 				first->vY = -first->vY;
-				first->x += (1-xCollide) * first->vX;
-				first->y += (1-xCollide) * first->vY;
 			}
-			//same as x collision but for y wall collision happening first
-			else {
-				first->x += yCollide * first->vX;
-				first->y += yCollide * first->vY;
-				first->vY = -first->vY;
-				if (xCollide < 1) {
-					first->x += (xCollide-yCollide) * first->vX;
-					first->y += (xCollide-yCollide) * first->vY;
-				}
-				else {
-					first->x += (1-yCollide) * first->vX;
-					first->y += (1-yCollide) * first->vY;
-				}
+			//artificially set timing to allow particle to continue after hitting corner
+			if (xCollide == yCollide) {
+				laterTime = 1;
 			}
+			first->x += (min(1, laterTime)-earlierTime) * first->vX;	
+			first->y += (min(1, laterTime)-earlierTime) * first->vY;
 			first->wColl++;
 		}
 };
@@ -363,7 +335,9 @@ __host__ void moveParticles(Particle* particles);
 __global__ void findEarliestCollision();
 __global__ void timeParticleCollision();
 __global__ void timeWallCollision();
-
+__global__ void executeParticleCollision();
+__global__ void executeWallCollision();
+__global__ void executeNoCollision();
 
 __host__ int main (void)
 {
@@ -406,7 +380,6 @@ __host__ int main (void)
 	}
 
 	auto start = chrono::high_resolution_clock::now();
-	
 	for (int i = 0; i < s; ++i)
 	{	
 		moveParticles(particles);
@@ -420,14 +393,12 @@ __host__ int main (void)
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
-	
 	for (int j = 0; j < n; ++j)
 	{
 		cout << (string) particles[j] << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	// printf("Time taken: %.5f s\n", timeTaken);
-	
 	return 0;
 }
 
@@ -459,10 +430,10 @@ __host__ void moveParticles(Particle* particles)
 	cudaMallocManaged(&temp, sizeof(CollisionEvent) * n);
 
 	// calculate collision times
-	timeWallCollision<<<(n-1)/32+1, 32, 0, streams[0]>>>();
-	dim3 threadsPerBlock(32, 32, 1);
-	dim3 blocksPerGrid((n-1)/32 + 1, (n-1)/32 + 1);
-		
+	timeWallCollision<<<(n-1)/64+1, 64, 0, streams[0]>>>();
+	dim3 threadsPerBlock(16, 16, 1);
+	dim3 blocksPerGrid((n-1)/16 + 1, (n-1)/16 + 1);
+
 	timeParticleCollision<<<blocksPerGrid, threadsPerBlock, 0, streams[1]>>>();
 
 	cudaDeviceSynchronize();
@@ -472,7 +443,6 @@ __host__ void moveParticles(Particle* particles)
 		}
 		cout << endl;
 	}
- 
 	for (int j = 0; j < n; ++j) {
 		cout<< wallCollisionTimes[j] << " ";
 	}
@@ -520,11 +490,13 @@ __host__ void moveParticles(Particle* particles)
 		}
 	}
 
-	/* #pragma omp parallel for
-	for (int i = 0; i < n; ++i)
-	{
-		(*found[i]).execute();
-	}*/
+	executeParticleCollision<<<(particleCollisionsCount-1)/64+1, 64, 0, streams[0]>>>();
+	executeWallCollision<<<(wallCollisionsCount-1)/64+1, 64, 0, streams[1]>>>();
+	executeNoCollision<<<(n-1)/64+1, 64, 0, streams[1]>>>(); 
+	/*for (int i = 0; i < n; ++i)
+	  {
+	  (*found[i]).execute();
+	  }*/
 }
 
 __global__ void findEarliestCollision()
@@ -572,7 +544,6 @@ __global__ void timeParticleCollision()
 		double c = pow((first.x-second.x), 2) + pow((first.y - second.y), 2) - 4*r*r;
 		double b = 2*((first.x - second.x)*(first.vX - second.vX) + (first.y - second.y)*(first.vY-second.vY));
 		double a = pow((first.vX-second.vX), 2) + pow((first.vY - second.vY), 2);
-	
 		//check for solution
 		double solfirst;
 		if (b*b-4*a*c < 0)
@@ -605,5 +576,32 @@ __global__ void timeWallCollision()
 		double xCollide = particle.vX < 0 ? (particle.x-r)/(0-particle.vX) : ((double)l-particle.x-r)/particle.vX;
 		double yCollide = particle.vY < 0 ? (particle.y-r)/(0-particle.vY) : ((double)l-particle.y-r)/particle.vY;
 		wallCollisionTimes[particle.i] = min(xCollide, yCollide);
+	}
+}
+
+__global__ void executeParticleCollision()
+{
+	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+	if (particleIndex < particleCollisionsCount)
+	{
+		particleCollisions[particleIndex].execute();
+	}
+}
+
+__global__ void executeWallCollision()
+{
+	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+	if (particleIndex < wallCollisionsCount)
+	{
+		wallCollisions[particleIndex].execute();
+	}
+}
+
+__global__ void executeNoCollision()
+{
+	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+	if (particleIndex < noCollisionsCount)
+	{
+		noCollisions[particleIndex].execute();
 	}
 }
