@@ -7,7 +7,8 @@ CS3210 Parallel Computing AY19/20 Sem 1
 ```
 │   README.md
 │   a1_report.pdf
-│   particle-simulator.cpp
+│   omp-simulator.cpp
+|   cuda-simulator.cu
 │
 └───input
 │   │   random1000.txt
@@ -22,8 +23,16 @@ CS3210 Parallel Computing AY19/20 Sem 1
     |   out4000.txt
 ```
 ## Instructions
-### Compilation
-`g++ particle-simulator.cpp -fopenmp -std=c++11`
+### OpenMP
+#### Compilation
+`g++ omp-simulator.cpp -fopenmp -std=c++11 -o omp-simulator`
 
-### Execution
-`./a.out < input/random1000.txt`
+#### Execution
+`./omp-simulator < input/random1000.txt`
+
+### CUDA
+#### Compilation
+`nvcc cuda-simulator.cu -o cuda-simulator`
+
+#### Execution
+`./cuda-simulator < input/random1000.txt`
