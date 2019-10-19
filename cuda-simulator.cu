@@ -584,7 +584,61 @@ __global__ void executeParticleCollision()
 	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
 	if (particleIndex < particleCollisionsCount)
 	{
-		particleCollisions[particleIndex].execute();
+		CollisionEvent *e = particleCollisions[particleIndex];
+        Particle *first = e->first;
+        Particle *second = e->second;
+        double time = e->time;
+        if (first->getIndex() >= second->getIndex())
+				return;
+        //move them to proper position first
+        first->x += time * first->vX;
+        first->y += time * first->vY;
+        second->x += time * second->vX;
+        second->y += time * second->vY;
+
+        //perform collision here
+        //find normal vector
+        double normalX = first->x - second->x;
+        double normalY = first->y - second->y;
+        double normalMag = sqrt(pow(normalX, 2) + pow(normalY, 2));
+        normalX = normalX/normalMag; normalY = normalY/normalMag;
+        double tangentX = -normalY;
+        double tangentY = normalX;
+        //compute velocity vectors wrt to normal and tangent
+        double vFirstNormal = normalX * first->vX + normalY * first->vY;
+        double vFirstTangent = tangentX * first->vX + tangentY * first->vY;
+        double vSecondNormal = normalX * second->vX + normalY * second->vY;
+        double vSecondTangent = tangentX * second->vX + tangentY * second->vY;
+        //collision simply swaps velocities
+        double temp = vFirstNormal;
+        vFirstNormal = vSecondNormal;
+        vSecondNormal = temp;
+        first->vX = vFirstNormal * normalX + vFirstTangent * tangentX;
+        first->vY = vFirstNormal * normalY + vFirstTangent * tangentY;
+        second->vX = vSecondNormal * normalX + vSecondTangent * tangentX;
+        second->vY = vSecondNormal * normalY + vSecondTangent * tangentY;
+        //eliminate negative 0s
+        if (first->vX == -0.0) first->vX = 0.0;
+        if (first->vY == -0.0) first->vY = 0.0;
+        if (second->vX == -0.0) second->vX = 0.0;
+        if (second->vY == -0.0) second->vY = 0.0;
+        //Continue to move them here
+        //Check for wall collisions and stop the particle at wall if so
+        double timeToMove;
+        double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-r-first->x)/first->vX;
+        double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-r-first->y)/first->vY;
+        if (xCollide >= 1-time && yCollide >= 1-time) 
+        {
+            timeToMove = 1-time;
+        }
+        else
+        {
+            timeToMove = min(xCollide, yCollide);
+        }
+        first->x += timeToMove * first->vX;
+        first->y += timeToMove * first->vY;
+        first->pColl++;
+        second->pColl++;
 	}
 }
 
@@ -593,8 +647,31 @@ __global__ void executeWallCollision()
 	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
 	if (particleIndex < wallCollisionsCount)
 	{
-		wallCollisions[particleIndex].execute();
-	}
+		CollisionEvent *e = wallCollisions[particleIndex];
+        Particle *first = e->first;
+        //check for x wall collisions
+        //check for y wall collisions
+        double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-first->x-r)/first->vX;
+        double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-first->y-r)/first->vY;
+        int earlierTime = min(xCollide, yCollide);
+        int laterTime = max(xCollide, yCollide);
+        first->x += earlierTime * first->vX;
+        first->y += earlierTime * first->vY;
+        //Reverse direction depending on which collision happens first
+        if (xCollide <= yCollide) {
+            first->vX = -first->vX;
+        }	
+        if (yCollide <= xCollide) {
+            first->vY = -first->vY;
+        }
+        //artificially set timing to allow particle to continue after hitting corner
+        if (xCollide == yCollide) {
+            laterTime = 1;
+        }
+        first->x += (min(1, laterTime)-earlierTime) * first->vX;	
+        first->y += (min(1, laterTime)-earlierTime) * first->vY;
+        first->wColl++;
+    }
 }
 
 __global__ void executeNoCollision()
@@ -602,6 +679,9 @@ __global__ void executeNoCollision()
 	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
 	if (particleIndex < noCollisionsCount)
 	{
-		noCollisions[particleIndex].execute();
+		CollisionEvent *e = noCollisions[particleIndex];
+        Particle *first = e->first;
+        first->x += first->vX;
+		first->y += first->vY;
 	}
 }
