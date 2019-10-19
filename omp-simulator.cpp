@@ -47,6 +47,7 @@ class Particle
 		{
 			return this->i;
 		}
+		
 }; 
 
 
@@ -368,7 +369,7 @@ int main ()
 		cout << (string) *particles[j] << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
-	// printf("Time taken: %.5f s\n", timeTaken);
+	 printf("Time taken: %.5f s\n", timeTaken);
 
 	return 0;
 }
@@ -461,6 +462,7 @@ void moveParticles(vector<Particle*> particles)
 	{
 		(*found[i]).execute();
 	}
+	particleCollisionTimes.destroy();
 }
 
 // input: 2 Particles
@@ -485,10 +487,7 @@ double timeParticleCollision(Particle& first, Particle& second)
 	{
 		return solfirst;
 	}
-	else
-	{
-		double solfirst = (sqrt(b*b-4*a*c)-b)/(2*a);
-	}
+	solfirst = (sqrt(b*b-4*a*c)-b)/(2*a);
 	if (solfirst > 0)
 	{
 		return 0;
