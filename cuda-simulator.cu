@@ -102,12 +102,12 @@ class CollisionEvent
 		const static int WALL = 0;
 		const static int PARTICLE = 1;
 		const static int NONE = 2;
-		
+
 		Particle* first;
 		Particle* second;
 		double time;
 		int type;
-	
+
 		__host__ __device__ bool operator == (CollisionEvent other)
 		{
 			int firstIndex = (*this->first).getIndex();
@@ -121,8 +121,8 @@ class CollisionEvent
 			}
 			return (firstIndex == otherFirstIndex);
 		}
-		
-		
+
+
 		__host__ __device__ bool operator < (CollisionEvent other)
 		{
 			if (this->time == other.getTime()) return this->getSmallestIndex() > other.getSmallestIndex(); 
@@ -132,7 +132,7 @@ class CollisionEvent
 		__host__ __device__ CollisionEvent() {}
 
 		__host__ __device__ virtual ~CollisionEvent() {}
-		
+
 		// wall collision event
 		__host__ __device__ CollisionEvent(Particle* first, double time)
 		{
@@ -141,7 +141,7 @@ class CollisionEvent
 			this->time = time;
 			this->type = this->WALL;
 		}
-		
+
 		// particle collision event
 		__host__ __device__ CollisionEvent(Particle* first, Particle* second, double time)
 		{
@@ -159,7 +159,7 @@ class CollisionEvent
 			this->time = 1.0;
 			this->type = this->NONE;
 		}
-		
+
 		// virtual void execute() {};
 
 		__host__ __device__ double getTime()
@@ -181,136 +181,6 @@ class CollisionEvent
 			return (*first).getIndex();
 		}
 };
-
-/*
-class ParticleCollisionEvent: public CollisionEvent
-{
-	public:
-		__host__ __device__ bool operator == (ParticleCollisionEvent other)
-		{
-			int firstIndex = (*this->first).getIndex();
-			int secondIndex = (*this->second).getIndex();
-			int otherFirstIndex = (*other.first).getIndex();
-			int otherSecondIndex = (*other.second).getIndex();
-			return (firstIndex == otherSecondIndex && secondIndex == otherFirstIndex) ||
-					(firstIndex == otherFirstIndex && secondIndex == otherSecondIndex);
-		}
-
-
-		__host__ __device__ ParticleCollisionEvent(Particle* first, Particle* second, double time)
-		: CollisionEvent(first, time)
-		{
-			this->second = second;
-		}
-   
-		void execute() 
-		{
-			if (first->getIndex() >= second->getIndex())
-				return;
-			//move them to proper position first
-			first->x += time * first->vX;
-			first->y += time * first->vY;
-			second->x += time * second->vX;
-			second->y += time * second->vY;
-
-			//perform collision here
-			//find normal vector
-			double normalX = first->x - second->x;
-			double normalY = first->y - second->y;
-			double normalMag = sqrt(pow(normalX, 2) + pow(normalY, 2));
-			normalX = normalX/normalMag; normalY = normalY/normalMag;
-			double tangentX = -normalY;
-			double tangentY = normalX;
-			//compute velocity vectors wrt to normal and tangent
-			double vFirstNormal = normalX * first->vX + normalY * first->vY;
-			double vFirstTangent = tangentX * first->vX + tangentY * first->vY;
-			double vSecondNormal = normalX * second->vX + normalY * second->vY;
-			double vSecondTangent = tangentX * second->vX + tangentY * second->vY;
-			//collision simply swaps velocities
-			double temp = vFirstNormal;
-			vFirstNormal = vSecondNormal;
-			vSecondNormal = temp;
-			first->vX = vFirstNormal * normalX + vFirstTangent * tangentX;
-			first->vY = vFirstNormal * normalY + vFirstTangent * tangentY;
-			second->vX = vSecondNormal * normalX + vSecondTangent * tangentX;
-			second->vY = vSecondNormal * normalY + vSecondTangent * tangentY;
-			//eliminate negative 0s
-			if (first->vX == -0.0) first->vX = 0.0;
-			if (first->vY == -0.0) first->vY = 0.0;
-			if (second->vX == -0.0) second->vX = 0.0;
-			if (second->vY == -0.0) second->vY = 0.0;
-			//Continue to move them here
-			//Check for wall collisions and stop the particle at wall if so
-			double timeToMove;
-			double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-r-first->x)/first->vX;
-			double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-r-first->y)/first->vY;
-			if (xCollide >= 1-time && yCollide >= 1-time) 
-			{
-				timeToMove = 1-time;
-			}
-			else
-			{
-				timeToMove = min(xCollide, yCollide);
-			}
-			first->x += timeToMove * first->vX;
-			first->y += timeToMove * first->vY;
-			first->pColl++;
-			second->pColl++;
-		}
-
-		__host__ __device__ double getSmallestIndex()
-		{
-			return (*first).getIndex() < (*second).getIndex() ? (*first).getIndex() : (*second).getIndex();
-		}
-};
-
-class WallCollisionEvent: public CollisionEvent
-{
-	public:
-
-		__host__ __device__ WallCollisionEvent(Particle* first, double time)
-		: CollisionEvent(first, time){}
-
-		void execute() {
-			//check for x wall collisions
-			//check for y wall collisions
-			double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-first->x-r)/first->vX;
-			double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-first->y-r)/first->vY;
-			int earlierTime = min(xCollide, yCollide);
-			int laterTime = max(xCollide, yCollide);
-			first->x += earlierTime * first->vX;
-			first->y += earlierTime * first->vY;
-			//Reverse direction depending on which collision happens first
-			if (xCollide <= yCollide) {
-				first->vX = -first->vX;
-			}	
-			if (yCollide <= xCollide) {
-				first->vY = -first->vY;
-			}
-			//artificially set timing to allow particle to continue after hitting corner
-			if (xCollide == yCollide) {
-				laterTime = 1;
-			}
-			first->x += (min(1, laterTime)-earlierTime) * first->vX;	
-			first->y += (min(1, laterTime)-earlierTime) * first->vY;
-			first->wColl++;
-		}
-};
-
-class NoCollisionEvent: public CollisionEvent
-{
-	public:
-
-		__host__ __device__ NoCollisionEvent(Particle* first)
-		: CollisionEvent(first, 1.0)
-		{}
-
-		void execute() {
-			//simply move the particle
-			first->x += first->vX;
-			first->y += first->vY;
-		}
-};*/
 
 __managed__ double** particleCollisionTimes;
 __managed__ double* wallCollisionTimes;
@@ -411,10 +281,10 @@ __host__ void moveParticles(Particle* particles)
 		cudaMallocManaged(&particleCollisionTimes[i], sizeof(double) * n);
 	}
 	cudaMallocManaged(&wallCollisionTimes, sizeof(double) * n);
-	
+
 	cudaMallocManaged(&found, sizeof(int) * n);
 	for (int i = 0; i < n; ++i) found[i] = -1;
-	
+
 	cudaMallocManaged(&particleCollisions, sizeof(CollisionEvent*) * n);
 	cudaMallocManaged((void**) &particleCollisionsCount, sizeof(int));
 	particleCollisionsCount = 0;
@@ -449,17 +319,15 @@ __host__ void moveParticles(Particle* particles)
 	cout << endl;
 	int foundCount = 0;
 	while (foundCount != n)
-	{   
+	{  
 		findEarliestCollision<<<(n-1)/32+1,32>>>();
 		for (int i = 0; i < n; ++i)
 		{
 			if (found[i] != -1) continue;
-
 			CollisionEvent* e = &temp[i];
-			
 			// particle-particle collision
 			if ((*e).getType() == CollisionEvent::PARTICLE)
-			// if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(e))
+				// if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(e))
 			{
 				int otherIndex = (*(*e).second).getIndex();
 				if (temp[otherIndex].getType() == CollisionEvent::PARTICLE)
@@ -474,7 +342,7 @@ __host__ void moveParticles(Particle* particles)
 			}
 			// particle-wall collision
 			else if ((*e).getType() == CollisionEvent::WALL)
-			//else if(WallCollisionEvent* v = dynamic_cast<WallCollisionEvent*>(e))
+				//else if(WallCollisionEvent* v = dynamic_cast<WallCollisionEvent*>(e))
 			{
 				found[i] = 0;
 				++foundCount;
@@ -489,7 +357,7 @@ __host__ void moveParticles(Particle* particles)
 			}
 		}
 	}
-
+	cout << particleCollisionsCount << " " << wallCollisionsCount << " " << noCollisionsCount << endl;
 	executeParticleCollision<<<(particleCollisionsCount-1)/64+1, 64, 0, streams[0]>>>();
 	executeWallCollision<<<(wallCollisionsCount-1)/64+1, 64, 0, streams[1]>>>();
 	executeNoCollision<<<(n-1)/64+1, 64, 0, streams[1]>>>(); 
@@ -502,11 +370,11 @@ __host__ void moveParticles(Particle* particles)
 __global__ void findEarliestCollision()
 {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
-	
+
 	if (index >= n || found[index] != -1) return;
 	// first assume no collision
 	temp[index] = CollisionEvent(&particles[index]);
-			
+
 	// check for particle-wall collision
 	if (wallCollisionTimes[index] < temp[index].getTime() && wallCollisionTimes[index] < 1)
 	{
@@ -517,7 +385,7 @@ __global__ void findEarliestCollision()
 	for (int j = index + 1; j < n; ++j)
 	{
 		double time = particleCollisionTimes[index][j];
-		
+
 		if (time > -1 && time < temp[index].getTime() && time < 1) {
 			temp[index] = CollisionEvent(&particles[index], &particles[j], time);
 		}
@@ -585,60 +453,60 @@ __global__ void executeParticleCollision()
 	if (particleIndex < particleCollisionsCount)
 	{
 		CollisionEvent *e = particleCollisions[particleIndex];
-        Particle *first = e->first;
-        Particle *second = e->second;
-        double time = e->time;
-        if (first->getIndex() >= second->getIndex())
-				return;
-        //move them to proper position first
-        first->x += time * first->vX;
-        first->y += time * first->vY;
-        second->x += time * second->vX;
-        second->y += time * second->vY;
+		Particle *first = e->first;
+		Particle *second = e->second;
+		double time = e->time;
+		if (first->getIndex() >= second->getIndex())
+			return;
+		//move them to proper position first
+		first->x += time * first->vX;
+		first->y += time * first->vY;
+		second->x += time * second->vX;
+		second->y += time * second->vY;
 
-        //perform collision here
-        //find normal vector
-        double normalX = first->x - second->x;
-        double normalY = first->y - second->y;
-        double normalMag = sqrt(pow(normalX, 2) + pow(normalY, 2));
-        normalX = normalX/normalMag; normalY = normalY/normalMag;
-        double tangentX = -normalY;
-        double tangentY = normalX;
-        //compute velocity vectors wrt to normal and tangent
-        double vFirstNormal = normalX * first->vX + normalY * first->vY;
-        double vFirstTangent = tangentX * first->vX + tangentY * first->vY;
-        double vSecondNormal = normalX * second->vX + normalY * second->vY;
-        double vSecondTangent = tangentX * second->vX + tangentY * second->vY;
-        //collision simply swaps velocities
-        double temp = vFirstNormal;
-        vFirstNormal = vSecondNormal;
-        vSecondNormal = temp;
-        first->vX = vFirstNormal * normalX + vFirstTangent * tangentX;
-        first->vY = vFirstNormal * normalY + vFirstTangent * tangentY;
-        second->vX = vSecondNormal * normalX + vSecondTangent * tangentX;
-        second->vY = vSecondNormal * normalY + vSecondTangent * tangentY;
-        //eliminate negative 0s
-        if (first->vX == -0.0) first->vX = 0.0;
-        if (first->vY == -0.0) first->vY = 0.0;
-        if (second->vX == -0.0) second->vX = 0.0;
-        if (second->vY == -0.0) second->vY = 0.0;
-        //Continue to move them here
-        //Check for wall collisions and stop the particle at wall if so
-        double timeToMove;
-        double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-r-first->x)/first->vX;
-        double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-r-first->y)/first->vY;
-        if (xCollide >= 1-time && yCollide >= 1-time) 
-        {
-            timeToMove = 1-time;
-        }
-        else
-        {
-            timeToMove = min(xCollide, yCollide);
-        }
-        first->x += timeToMove * first->vX;
-        first->y += timeToMove * first->vY;
-        first->pColl++;
-        second->pColl++;
+		//perform collision here
+		//find normal vector
+		double normalX = first->x - second->x;
+		double normalY = first->y - second->y;
+		double normalMag = sqrt(pow(normalX, 2) + pow(normalY, 2));
+		normalX = normalX/normalMag; normalY = normalY/normalMag;
+		double tangentX = -normalY;
+		double tangentY = normalX;
+		//compute velocity vectors wrt to normal and tangent
+		double vFirstNormal = normalX * first->vX + normalY * first->vY;
+		double vFirstTangent = tangentX * first->vX + tangentY * first->vY;
+		double vSecondNormal = normalX * second->vX + normalY * second->vY;
+		double vSecondTangent = tangentX * second->vX + tangentY * second->vY;
+		//collision simply swaps velocities
+		double temp = vFirstNormal;
+		vFirstNormal = vSecondNormal;
+		vSecondNormal = temp;
+		first->vX = vFirstNormal * normalX + vFirstTangent * tangentX;
+		first->vY = vFirstNormal * normalY + vFirstTangent * tangentY;
+		second->vX = vSecondNormal * normalX + vSecondTangent * tangentX;
+		second->vY = vSecondNormal * normalY + vSecondTangent * tangentY;
+		//eliminate negative 0s
+		if (first->vX == -0.0) first->vX = 0.0;
+		if (first->vY == -0.0) first->vY = 0.0;
+		if (second->vX == -0.0) second->vX = 0.0;
+		if (second->vY == -0.0) second->vY = 0.0;
+		//Continue to move them here
+		//Check for wall collisions and stop the particle at wall if so
+		double timeToMove;
+		double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-r-first->x)/first->vX;
+		double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-r-first->y)/first->vY;
+		if (xCollide >= 1-time && yCollide >= 1-time) 
+		{
+			timeToMove = 1-time;
+		}
+		else
+		{
+			timeToMove = min(xCollide, yCollide);
+		}
+		first->x += timeToMove * first->vX;
+		first->y += timeToMove * first->vY;
+		first->pColl++;
+		second->pColl++;
 	}
 }
 
@@ -647,31 +515,33 @@ __global__ void executeWallCollision()
 	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
 	if (particleIndex < wallCollisionsCount)
 	{
-		CollisionEvent *e = wallCollisions[particleIndex];
-        Particle *first = e->first;
-        //check for x wall collisions
-        //check for y wall collisions
-        double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-first->x-r)/first->vX;
-        double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-first->y-r)/first->vY;
-        int earlierTime = min(xCollide, yCollide);
-        int laterTime = max(xCollide, yCollide);
-        first->x += earlierTime * first->vX;
-        first->y += earlierTime * first->vY;
-        //Reverse direction depending on which collision happens first
-        if (xCollide <= yCollide) {
-            first->vX = -first->vX;
-        }	
-        if (yCollide <= xCollide) {
-            first->vY = -first->vY;
-        }
-        //artificially set timing to allow particle to continue after hitting corner
-        if (xCollide == yCollide) {
-            laterTime = 1;
-        }
-        first->x += (min(1, laterTime)-earlierTime) * first->vX;	
-        first->y += (min(1, laterTime)-earlierTime) * first->vY;
-        first->wColl++;
-    }
+		printf("reeeeeee\n");
+		Particle *first = e->first;
+		printf("wall collision index: %d\n", first->i);
+		//check for x wall collisions
+		//check for y wall collisions
+		double xCollide = first->vX < 0 ? (first->x-r)/(0-first->vX) : ((double)l-first->x-r)/first->vX;
+		double yCollide = first->vY < 0 ? (first->y-r)/(0-first->vY) : ((double)l-first->y-r)/first->vY;
+		int earlierTime = min(xCollide, yCollide);
+		int laterTime = max(xCollide, yCollide);
+		first->x += earlierTime * first->vX;
+		first->y += earlierTime * first->vY;
+		//Reverse direction depending on which collision happens first
+		if (xCollide <= yCollide) {
+			first->vX = -first->vX;
+		}	
+		if (yCollide <= xCollide) {
+			first->vY = -first->vY;
+		}
+		//artificially set timing to allow particle to continue after hitting corner
+		if (xCollide == yCollide) {
+			laterTime = 1;
+		}
+		first->x += (min(1, laterTime)-earlierTime) * first->vX;	
+		first->y += (min(1, laterTime)-earlierTime) * first->vY;
+		first->wColl++;
+		*/
+	}
 }
 
 __global__ void executeNoCollision()
@@ -680,8 +550,8 @@ __global__ void executeNoCollision()
 	if (particleIndex < noCollisionsCount)
 	{
 		CollisionEvent *e = noCollisions[particleIndex];
-        Particle *first = e->first;
-        first->x += first->vX;
+		Particle *first = e->first;
+		first->x += first->vX;
 		first->y += first->vY;
 	}
 }
