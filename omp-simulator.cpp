@@ -5,12 +5,13 @@
 #include <chrono>
 #include <random>
 #include <atomic>
-using namespace std;
 
-int n, l, r, s;
+using namespace std;
 
 mt19937 rng;
 random_device rd;
+int n, l, r, s;
+
 
 class Particle
 { 
@@ -58,7 +59,6 @@ class Particle
 		}
 		
 }; 
-
 
 class JaggedMatrix
 {
@@ -378,7 +378,7 @@ int main ()
 		cout << particles[j]->getFullRepresentation() << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
-	 printf("Time taken: %.5f s\n", timeTaken);
+	// printf("Time taken: %.5f s\n", timeTaken);
 
 	return 0;
 }
@@ -395,12 +395,12 @@ void moveParticles(vector<Particle*> particles)
 	vector<CollisionEvent> events;
 
 	// calculate collision times
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (int i = 0; i < n; ++i)
 	{
 		wallCollisionTimes[i] = timeWallCollision(*particles[i]);
 
-#pragma omp parallel for
+		#pragma omp parallel for
 		for (int j = i+1; j < n; ++j)
 		{
 			double particleCollisionTime = timeParticleCollision(*particles[i], *particles[j]);
@@ -412,7 +412,7 @@ void moveParticles(vector<Particle*> particles)
 	while (foundCount != n)
 	{   
 		CollisionEvent* temp[n];
-#pragma omp parallel for
+		#pragma omp parallel for
 		for (int i = 0; i < n; ++i)
 		{   
 			// first assume no collision
@@ -468,7 +468,7 @@ void moveParticles(vector<Particle*> particles)
 		}
 	}
 
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (int i = 0; i < n; ++i)
 	{
 		(*found[i]).execute();

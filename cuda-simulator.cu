@@ -15,6 +15,7 @@ mt19937 rng;
 random_device rd;
 __managed__ int n, l, r, s;
 
+
 class Particle
 { 
 	public: 
@@ -59,51 +60,6 @@ class Particle
 		}
 }; 
 
-
-class JaggedMatrix
-{
-	public:
-		int length;
-		double **matrix;
-
-		JaggedMatrix(int i) 
-		{
-			this->length = i;
-			matrix = (double**) calloc(i, sizeof(double *));
-			for (int k = 0; k < i; ++k) 
-			{
-				matrix[k] = (double *) calloc(k+1, sizeof(double));
-			}
-		}
-
-		int get(int i, int j)
-		{
-			if (i < j) 
-			{
-				return matrix[j][i];
-			}
-			return matrix[i][j];
-		}
-
-		void set(int i, int j, double value)
-		{
-			if (i < j) 
-			{
-				matrix[j][i] = value;
-			} else {
-				matrix[i][j] = value;
-			}
-		}
-
-		void destroy()
-		{
-			for (int k = 0; k < length; ++k)
-			{
-				free(matrix[k]);
-			}
-			free(matrix);
-		}
-};
 
 class CollisionEvent 
 {
@@ -169,8 +125,6 @@ class CollisionEvent
 			this->type = this->NONE;
 		}
 
-		// virtual void execute() {};
-
 		__host__ __device__ double getTime()
 		{
 			return this->time;
@@ -191,10 +145,19 @@ class CollisionEvent
 		}
 };
 
+
+// cuda streams
+cudaStream_t streams[NUM_STREAMS];
+
+// particle objects
+__managed__ Particle* particles;
+
+// collision times
 __managed__ double** particleCollisionTimes;
 __managed__ double* wallCollisionTimes;
-__managed__ Particle* particles;
-// __managed__ CollisionEvent* found;
+
+// collision events
+__managed__ CollisionEvent* temp;
 __managed__ int* found;
 
 __managed__ CollisionEvent** particleCollisions;
@@ -206,10 +169,7 @@ __managed__ int wallCollisionsCount;
 __managed__ CollisionEvent** noCollisions;
 __managed__ int noCollisionsCount;
 
-__managed__ CollisionEvent* temp;
-
-cudaStream_t streams[NUM_STREAMS];
-
+// function headers
 __host__ void moveParticles(Particle* particles);
 __global__ void findEarliestCollision();
 __global__ void timeParticleCollision();
@@ -220,7 +180,7 @@ __global__ void executeNoCollision();
 
 __host__ int main (void)
 {
-	string command; // simulator command
+	string command;
 	cin >> n >> l >> r >> s >> command;
 
 	rng.seed(rd());
@@ -289,7 +249,7 @@ __host__ int main (void)
 		cout << particles[j].getFullRepresentation() << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
-	//printf("Time taken: %.5f s\n", timeTaken);
+	// printf("Time taken: %.5f s\n", timeTaken);
 	return 0;
 }
 
@@ -303,12 +263,14 @@ __host__ void moveParticles(Particle* particles)
 	
 	// calculate collision times
 	timeWallCollision<<<(n-1)/64+1, 64, 0, streams[0]>>>();
+	
 	dim3 threadsPerBlock(16, 16, 1);
 	dim3 blocksPerGrid((n-1)/16 + 1, (n-1)/16 + 1);
-
 	timeParticleCollision<<<blocksPerGrid, threadsPerBlock, 0, streams[1]>>>();
 
 	cudaDeviceSynchronize();
+	
+	// find valid collisions
 	int foundCount = 0;
 	while (foundCount != n)
 	{  
@@ -320,7 +282,6 @@ __host__ void moveParticles(Particle* particles)
 			CollisionEvent* e = &temp[i];
 			// particle-particle collision
 			if ((*e).getType() == CollisionEvent::PARTICLE)
-				// if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(e))
 			{
 				int otherIndex = (*(*e).second).getIndex();
 				if (temp[otherIndex].getType() == CollisionEvent::PARTICLE)
@@ -336,7 +297,6 @@ __host__ void moveParticles(Particle* particles)
 			}
 			// particle-wall collision
 			else if ((*e).getType() == CollisionEvent::WALL)
-				//else if(WallCollisionEvent* v = dynamic_cast<WallCollisionEvent*>(e))
 			{
 				found[i] = 0;
 				++foundCount;
@@ -351,14 +311,12 @@ __host__ void moveParticles(Particle* particles)
 			}
 		}
 	}
+
+	// apply valid collisions
 	executeParticleCollision<<<(particleCollisionsCount-1)/64+1, 64, 0, streams[0]>>>();
 	executeWallCollision<<<(wallCollisionsCount-1)/64+1, 64, 0, streams[1]>>>();
 	executeNoCollision<<<(n-1)/64+1, 64, 0, streams[1]>>>(); 
-	cudaDeviceSynchronize();	
-	/*for (int i = 0; i < n; ++i)
-	  {
-	  (*found[i]).execute();
-	  }*/
+	cudaDeviceSynchronize();
 }
 
 __global__ void findEarliestCollision()
@@ -389,8 +347,8 @@ __global__ void findEarliestCollision()
 }
 
 
-// input: 2 Particles
-// output: Returns time taken before collision occurs if they collide, negative value otherwise.
+// "input": 2 Particles
+// "output": Returns time taken before collision occurs if they collide, negative value otherwise.
 __global__ void timeParticleCollision()
 {
 	int firstIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -429,8 +387,8 @@ __global__ void timeParticleCollision()
 	}
 }
 
-// input: 1 Particle
-// output: Returns time taken before collision occurs if it collides with wall, negative value otherwise.
+// "input": 1 Particle
+// "output": Returns time taken before collision occurs if it collides with wall, negative value otherwise.
 __global__ void timeWallCollision()
 {
 	int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
