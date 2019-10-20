@@ -17,7 +17,7 @@ class Particle
 	public: 
 		operator string() const { 
 			char buffer [200];
-			snprintf(buffer, 200, "%d %.8lf %.8lf %.8lf %.8lf %d %d", i, x, y, vX, vY, pColl, wColl); 
+			snprintf(buffer, 200, "%d %.8lf %.8lf %.8lf %.8lf", i, x, y, vX, vY); 
 			return buffer;
 		}
 
@@ -46,6 +46,15 @@ class Particle
 		int getIndex()
 		{
 			return this->i;
+		}
+		
+		string getFullRepresentation()
+		{
+			
+			char buffer[200];
+			snprintf(buffer, 200, "%d %.8lf %.8lf %.8lf %.8lf %d %d", i, x, y, vX, vY, pColl, wColl); 
+			string res(buffer);
+			return res;
 		}
 		
 }; 
@@ -352,21 +361,21 @@ int main ()
 
 	for (int i = 0; i < s; ++i)
 	{	
+		moveParticles(particles);
 		if (!command.compare("print"))
 		{
 			for (int j = 0; j < particles.size(); ++j)
 			{
 				cout << i << " " << (string) *particles[j] << endl;
 			}
-		}	
-		moveParticles(particles);
+		}
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
 
-	for (int j = 0; j < particles.size(); ++j)
+	for (int j = 0; j < n; ++j)
 	{
-		cout << (string) *particles[j] << endl;
+		cout << particles[j]->getFullRepresentation() << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	 printf("Time taken: %.5f s\n", timeTaken);

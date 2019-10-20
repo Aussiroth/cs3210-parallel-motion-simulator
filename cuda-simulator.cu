@@ -273,6 +273,7 @@ __host__ int main (void)
 	auto start = chrono::high_resolution_clock::now();
 	for (int i = 0; i < s; ++i)
 	{
+		moveParticles(particles);
 		if (!command.compare("print"))
 		{
 			for (int j = 0; j < n; ++j)
@@ -280,7 +281,6 @@ __host__ int main (void)
 				cout << i << " " << (string) particles[j] << endl;
 			}
 		}
-		moveParticles(particles);
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
@@ -309,16 +309,6 @@ __host__ void moveParticles(Particle* particles)
 	timeParticleCollision<<<blocksPerGrid, threadsPerBlock, 0, streams[1]>>>();
 
 	cudaDeviceSynchronize();
-	/*for (int i = 0; i < n; ++i) {
-		for (int j = 0; j < n; ++j) {
-			cout<< particleCollisionTimes[i][j] << " ";
-		}
-		cout << endl;
-	}
-	for (int j = 0; j < n; ++j) {
-		cout<< wallCollisionTimes[j] << " ";
-	}
-	cout << endl;*/
 	int foundCount = 0;
 	while (foundCount != n)
 	{  
