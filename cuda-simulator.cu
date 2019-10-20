@@ -20,7 +20,7 @@ class Particle
 	public: 
 		operator string() const { 
 			char buffer [200];
-			snprintf(buffer, 200, "%d %.8lf %.8lf %.8lf %.8lf %d %d", i, x, y, vX, vY, pColl, wColl); 
+			snprintf(buffer, 200, "%d %.8lf %.8lf %.8lf %.8lf", i, x, y, vX, vY); 
 			return buffer;
 		}
 
@@ -47,6 +47,15 @@ class Particle
 		__device__ __host__ int getIndex()
 		{
 			return this->i;
+		}
+		
+		string getFullRepresentation()
+		{
+			
+			char buffer[200];
+			snprintf(buffer, 200, "%d %.8lf %.8lf %.8lf %.8lf %d %d", i, x, y, vX, vY, pColl, wColl); 
+			string res(buffer);
+			return res;
 		}
 }; 
 
@@ -246,11 +255,24 @@ __host__ int main (void)
 	{
 		cudaStreamCreate(&streams[i]);
 	}
+	cudaMallocManaged(&particleCollisionTimes, sizeof(double*) * n);
+	for (int i = 0; i < n; ++i)
+	{
+		cudaMallocManaged(&particleCollisionTimes[i], sizeof(double) * n);
+	}
+	cudaMallocManaged(&wallCollisionTimes, sizeof(double) * n);
+	cudaMallocManaged(&found, sizeof(int) * n);
+	cudaMallocManaged(&particleCollisions, sizeof(CollisionEvent*) * n);
+	cudaMallocManaged((void**) &particleCollisionsCount, sizeof(int));
+	cudaMallocManaged(&wallCollisions, sizeof(CollisionEvent*) * n);
+	cudaMallocManaged((void**) &wallCollisionsCount, sizeof(int));
+	cudaMallocManaged(&noCollisions, sizeof(CollisionEvent*) * n);
+	cudaMallocManaged((void**) &noCollisionsCount, sizeof(int));
+	cudaMallocManaged(&temp, sizeof(CollisionEvent) * n);
 
 	auto start = chrono::high_resolution_clock::now();
 	for (int i = 0; i < s; ++i)
 	{
-		cout << i << endl;	
 		if (!command.compare("print"))
 		{
 			for (int j = 0; j < n; ++j)
@@ -264,40 +286,21 @@ __host__ int main (void)
 	auto finish = std::chrono::high_resolution_clock::now();
 	for (int j = 0; j < n; ++j)
 	{
-		cout << (string) particles[j] << endl;
+		cout << particles[j].getFullRepresentation() << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
-	printf("Time taken: %.5f s\n", timeTaken);
+	//printf("Time taken: %.5f s\n", timeTaken);
 	return 0;
 }
 
 
 __host__ void moveParticles(Particle* particles) 
 {
-	cudaMallocManaged(&particleCollisionTimes, sizeof(double*) * n);
-	for (int i = 0; i < n; ++i)
-	{
-		cudaMallocManaged(&particleCollisionTimes[i], sizeof(double) * n);
-	}
-	cudaMallocManaged(&wallCollisionTimes, sizeof(double) * n);
-
-	cudaMallocManaged(&found, sizeof(int) * n);
 	for (int i = 0; i < n; ++i) found[i] = -1;
-
-	cudaMallocManaged(&particleCollisions, sizeof(CollisionEvent*) * n);
-	cudaMallocManaged((void**) &particleCollisionsCount, sizeof(int));
-	particleCollisionsCount = 0;
-
-	cudaMallocManaged(&wallCollisions, sizeof(CollisionEvent*) * n);
-	cudaMallocManaged((void**) &wallCollisionsCount, sizeof(int));
+	particleCollisionsCount = 0;	
 	wallCollisionsCount = 0;
-
-	cudaMallocManaged(&noCollisions, sizeof(CollisionEvent*) * n);
-	cudaMallocManaged((void**) &noCollisionsCount, sizeof(int));
 	noCollisionsCount = 0;
-
-	cudaMallocManaged(&temp, sizeof(CollisionEvent) * n);
-
+	
 	// calculate collision times
 	timeWallCollision<<<(n-1)/64+1, 64, 0, streams[0]>>>();
 	dim3 threadsPerBlock(16, 16, 1);
