@@ -6,13 +6,15 @@
 #include <random>
 #include <atomic>
 #include <stdio.h>
+#include <mpi.h>
 
 using namespace std;
 
 mt19937 rng;
 random_device rd;
 int n, l, r, s;
-int rank, size;
+int blockSize;
+int mpiRank, size;
 
 #define MASTER_ID 0
 
@@ -275,7 +277,7 @@ double timeWallCollision(Particle&);
 void sendParticles(vector<Particle *> particles)
 {
 	double buffer[5 * n];
-	if (rank == MASTER_ID) {
+	if (mpiRank == MASTER_ID) {
 		for (int i = 0; i < particles.size(); ++i)
 		{
 			Particle* particle = particles[i];
@@ -286,8 +288,8 @@ void sendParticles(vector<Particle *> particles)
 			buffer[i * 5 + 4] = particle->vY;
 		}
 	}
-	MPI_BCast(buffer, 5 * n, MPI_DOUBLE, MASTER_ID, MPI_COMM_WORLD);
-	if (rank != MASTER_ID) {
+	MPI_Bcast(buffer, 5 * n, MPI_DOUBLE, MASTER_ID, MPI_COMM_WORLD);
+	if (mpiRank != MASTER_ID) {
 		for (int i = 0; i < particles.size(); ++i)
 		{
 			Particle* particle = particles[i];
@@ -302,14 +304,14 @@ void sendParticles(vector<Particle *> particles)
 
 int main (int argc, char **argv)
 {
-	MPI_INIT(&argc, &argv);
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Init(&argc, &argv);
+	MPI_Comm_rank(MPI_COMM_WORLD, &mpiRank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
-	vector<Particle*> particles
+	vector<Particle*> particles;
+	string command;
 
-	if (rank == MASTER_ID)
+	if (mpiRank == MASTER_ID)
 	{
-		string command;
 		cin >> n >> l >> r >> s >> command;
 
 		rng.seed(rd());
@@ -342,7 +344,9 @@ int main (int argc, char **argv)
 
 	int buffer[4];
 	buffer[0] = n, buffer[1] = l, buffer[2] = r, buffer[3] = s;
-	MPI_BCast(buffer, 4, MPI_INT, MASTER_ID, MPI_COMM_WORLD);
+	MPI_Bcast(buffer, 4, MPI_INT, MASTER_ID, MPI_COMM_WORLD);
+	n = buffer[0], l = buffer[1], r = buffer[2], s = buffer[3];
+	blockSize = n / size;
 	sendParticles(particles);
 
 	auto start = chrono::high_resolution_clock::now();
@@ -350,19 +354,22 @@ int main (int argc, char **argv)
 	{
 
 		moveParticles(particles);
-		if (!command.compare("print"))
+		if (mpiRank == MASTER_ID)
 		{
-			for (int j = 0; j < n; ++j)
+			if (!command.compare("print"))
 			{
-				cout << i << " " << (string) particles[j] << endl;
+				for (int j = 0; j < n; ++j)
+				{
+					cout << i << " " << (string) (*particles[j]) << endl;
+				}
 			}
-		}
+		}	
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
 	for (int j = 0; j < n; ++j)
 	{
-		cout << particles[j].getFullRepresentation() << endl;
+		cout << particles[j]->getFullRepresentation() << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	// printf("Time taken: %.5f s\n", timeTaken);
@@ -373,9 +380,9 @@ int main (int argc, char **argv)
 }
 
 
-void moveParticles(Particle* particles) 
+void moveParticles(vector<Particle*> particles) 
 {
-	int offset = blocksize * rank;
+	int offset = blockSize * mpiRank;
 
 	// time of particle-particle collisions
 	vector<vector<double>> particleCollisionTimes(blockSize, vector<double>(n, 0));
@@ -455,11 +462,11 @@ void moveParticles(Particle* particles)
 	for (int i = 0; i < n; ++i)
 	{
 		Particle* particle = particles[i];
-		particle->i = buffer[i * 5]; 
-		particle->x = buffer[i * 5 + 1];
-		particle->y = buffer[i * 5 + 2];
-		particle->vX = buffer[i * 5 + 3];
-		particle->vY = buffer[i * 5 + 4];
+		particle->i = recvBuffer[i * 5]; 
+		particle->x = recvBuffer[i * 5 + 1];
+		particle->y = recvBuffer[i * 5 + 2];
+		particle->vX = recvBuffer[i * 5 + 3];
+		particle->vY = recvBuffer[i * 5 + 4];
 	}
 }
 
