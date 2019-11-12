@@ -1,3 +1,4 @@
+#include <mpi.h>
 #include <iostream>
 #include <cmath>
 #include <vector> 
@@ -6,7 +7,6 @@
 #include <random>
 #include <atomic>
 #include <stdio.h>
-#include <mpi.h>
 
 using namespace std;
 
@@ -38,7 +38,7 @@ class Particle
 
 		Particle() {};
 
-		Particle(int i, double x, double y, double vX, double vY, int l) 
+		Particle(int i, double x, double y, double vX, double vY) 
 		{
 			this -> i = i;
 			this -> x = x;
@@ -123,9 +123,6 @@ class ParticleCollisionEvent: public CollisionEvent
 
 		void execute() 
 		{
-			if (first->getIndex() >= second->getIndex())
-				return;
-			
 			//move them to proper position first
 			first->x += this->time * first->vX;
 			first->y += this->time * first->vY;
@@ -330,7 +327,7 @@ int main (int argc, char **argv)
 			count = scanf("%d %lf %lf %lf %lf", &index, &x, &y, &vX, &vY);
 			if (count == EOF || count <= 0) break;
 
-			particles.push_back(new Particle(index, x, y, vX, vY, l));
+			particles.push_back(new Particle(index, x, y, vX, vY));
 		}
 		for (int j = scanned; j < n; j++)
 		{
@@ -338,17 +335,20 @@ int main (int argc, char **argv)
 			double y = pos(rng);
 			double vX = velocity(rng);
 			double vY = velocity(rng);
-			particles.push_back(new Particle(j, x, y, vX, vY, l));
+			particles.push_back(new Particle(j, x, y, vX, vY));
 		}
 	}
-
 	int buffer[4];
 	buffer[0] = n, buffer[1] = l, buffer[2] = r, buffer[3] = s;
 	MPI_Bcast(buffer, 4, MPI_INT, MASTER_ID, MPI_COMM_WORLD);
 	n = buffer[0], l = buffer[1], r = buffer[2], s = buffer[3];
 	blockSize = n / size;
+	//Allocate space on vector for particles if they are not master
+	if (mpiRank != MASTER_ID)
+	{
+		for (int i = 0; i < n; i++) particles.push_back(new Particle(0, 0, 0, 0, 0));
+	}
 	sendParticles(particles);
-
 	auto start = chrono::high_resolution_clock::now();
 	for (int i = 0; i < s; ++i)
 	{
@@ -367,9 +367,12 @@ int main (int argc, char **argv)
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
-	for (int j = 0; j < n; ++j)
+	if (mpiRank == MASTER_ID)
 	{
-		cout << particles[j]->getFullRepresentation() << endl;
+		for (int j = 0; j < n; ++j)
+		{
+			cout << particles[j]->getFullRepresentation() << endl;
+		}
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	// printf("Time taken: %.5f s\n", timeTaken);
@@ -397,13 +400,12 @@ void moveParticles(vector<Particle*> particles)
 	{
 		wallCollisionTimes[i] = timeWallCollision(*particles[offset + i]);
 
-		for (int j = i+1; j < n; ++j)
+		for (int j = 0; j < n; ++j)
 		{
 			double particleCollisionTime = timeParticleCollision(*particles[offset + i], *particles[j]);
 			particleCollisionTimes[i][j] = particleCollisionTime;
 		}
 	}
-	
 	CollisionEvent* temp[blockSize];
 	// find earliest collision
 	for (int i = 0; i < blockSize; ++i)
@@ -421,8 +423,7 @@ void moveParticles(vector<Particle*> particles)
 			// check for particle-particle collision
 			for (int j = 0; j < n; ++j)
 			{
-				if (i == j) continue;
-
+				if (offset + i == j) continue;
 				double time = particleCollisionTimes[i][j];
 				if (time > -1 && time < (*temp[i]).getTime() && time < 1) {
 					delete(temp[i]);
@@ -430,13 +431,12 @@ void moveParticles(vector<Particle*> particles)
 				}
 			}
 	}
-
 	// apply valid collisions
-	for (int i = 0; i < n; ++i)
+	for (int i = 0; i < blockSize; ++i)
 	{
-		(*temp[i]).execute();
+		temp[i]->execute();
 	}
-	for (int i = 0; i < n; ++i) delete(temp[i]);
+	for (int i = 0; i < blockSize; ++i) delete(temp[i]);
 
 	double sendBuffer[blockSize * 5];
 	for (int i = 0; i < blockSize; ++i)
@@ -448,13 +448,13 @@ void moveParticles(vector<Particle*> particles)
 		sendBuffer[i * 5 + 4] = particles[offset + i]->vY;
 	}
 	
-	double recvBuffer[n *  5];
+	double recvBuffer[n * 5];
 	MPI_Allgather(
 		sendBuffer, 
 		blockSize * 5, 
 		MPI_DOUBLE, 
 		recvBuffer, 
-		n * 5, 
+		blockSize * 5, 
 		MPI_DOUBLE, 
 		MPI_COMM_WORLD
 	);
