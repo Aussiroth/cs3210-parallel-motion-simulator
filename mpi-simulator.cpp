@@ -342,7 +342,9 @@ int main (int argc, char **argv)
 	buffer[0] = n, buffer[1] = l, buffer[2] = r, buffer[3] = s;
 	MPI_Bcast(buffer, 4, MPI_INT, MASTER_ID, MPI_COMM_WORLD);
 	n = buffer[0], l = buffer[1], r = buffer[2], s = buffer[3];
-	blockSize = n / size;
+	// TODO: Account for particles belonging in the same block for particle-particle collision
+	blockSize = 1;
+
 	//Allocate space on vector for particles if they are not master
 	if (mpiRank != MASTER_ID)
 	{
@@ -376,13 +378,13 @@ int main (int argc, char **argv)
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
-	if (mpiRank == MASTER_ID)
-	{
-		for (int j = 0; j < n; ++j)
-		{
-			cout << particles[j]->getFullRepresentation() << endl;
-		}
-	}
+	// if (mpiRank == MASTER_ID)
+	// {
+	// 	for (int j = 0; j < n; ++j)
+	// 	{
+	// 		cout << particles[j]->getFullRepresentation() << endl;
+	// 	}
+	// }
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	// printf("Time taken: %.5f s\n", timeTaken);
 
@@ -395,6 +397,7 @@ int main (int argc, char **argv)
 void moveParticles(vector<Particle*> particles) 
 {
 	int offset = blockSize * mpiRank;
+	printf("%d %d\n", mpiRank, offset);
 
 	// time of particle-particle collisions
 	vector<vector<double>> particleCollisionTimes(blockSize, vector<double>(n, 0));
