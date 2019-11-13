@@ -352,8 +352,6 @@ int main (int argc, char **argv)
 	auto start = chrono::high_resolution_clock::now();
 	for (int i = 0; i < s; ++i)
 	{
-
-		moveParticles(particles);
 		if (mpiRank == MASTER_ID)
 		{
 			if (!command.compare("print"))
@@ -363,7 +361,18 @@ int main (int argc, char **argv)
 					cout << i << " " << (string) (*particles[j]) << endl;
 				}
 			}
-		}	
+		}
+		moveParticles(particles);	
+	}
+	if (mpiRank == MASTER_ID)
+	{
+		if (!command.compare("print"))
+		{
+			for (int j = 0; j < n; ++j)
+			{
+				cout << s << " " << (string) (*particles[j]) << endl;
+			}
+		}
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
@@ -409,7 +418,7 @@ void moveParticles(vector<Particle*> particles)
 	CollisionEvent* temp[blockSize];
 	// find earliest collision
 	for (int i = 0; i < blockSize; ++i)
-	{   
+	{ 
 			// first assume no collision
 			temp[i] = new NoCollisionEvent(particles[offset + i]);
 
