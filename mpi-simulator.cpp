@@ -344,7 +344,8 @@ int main (int argc, char **argv)
 	n = buffer[0], l = buffer[1], r = buffer[2], s = buffer[3];
 	// TODO: Account for particles belonging in the same block for particle-particle collision
 	blockSize = 1;
-
+	//blockSize = n/Size;
+	//if (mpiRank < n%size) blockSize++;
 	//Allocate space on vector for particles if they are not master
 	if (mpiRank != MASTER_ID)
 	{
@@ -397,6 +398,8 @@ int main (int argc, char **argv)
 void moveParticles(vector<Particle*> particles) 
 {
 	int offset = blockSize * mpiRank;
+	//need to modify offset to account for earlier processes getting the extra 1 particle to calculate
+	//offset += min(n%size, mpiRank);
 	printf("%d %d\n", mpiRank, offset);
 
 	// time of particle-particle collisions
