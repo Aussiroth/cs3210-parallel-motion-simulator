@@ -437,29 +437,127 @@ void moveParticles(vector<Particle*> particles)
 	}
 	CollisionEvent* temp[blockSize];
 	// find earliest collision
-	for (int i = 0; i < blockSize; ++i)
-	{ 
+	// for (int i = 0; i < blockSize; ++i)
+	// { 
+	// 		// first assume no collision
+	// 		temp[i] = new NoCollisionEvent(particles[blockStart + i]);
+
+	// 		// check for particle-wall collision
+	// 		if (wallCollisionTimes[i] < (*temp[i]).getTime() && wallCollisionTimes[i] < 1)
+	// 		{
+	// 			delete(temp[i]);
+	// 			temp[i] = new WallCollisionEvent(particles[blockStart + i], wallCollisionTimes[i]);
+	// 		}
+
+	// 		// check for particle-particle collision
+	// 		for (int j = 0; j < n; ++j)
+	// 		{
+	// 			if (blockStart + i == j) continue;
+	// 			double time = particleCollisionTimes[i][j];
+	// 			if (time > -1 && time < (*temp[i]).getTime() && time < 1) {
+	// 				delete(temp[i]);
+	// 				temp[i] = new ParticleCollisionEvent(particles[blockStart + i], particles[j], time);
+	// 			}
+	// 		}
+	// }
+
+
+
+	// CollisionEvent* found[blockSize] = { nullptr };
+	boolean found[n];
+	for (int i = 0; i < n; ++i) found[i] = false;
+	CollisionEvent* temp[n];
+	int foundCount = 0; // out of n
+	int partners[n];
+	for (int i = 0; i < n; ++i) partners[i] = -1;
+	while (foundCount != n)
+	{
+		for (int i = 0; i < blockSize; ++i)
+		{
+			if (found[i])
+			{
+				continue;
+			}
+
 			// first assume no collision
-			temp[i] = new NoCollisionEvent(particles[blockStart + i]);
+			temp[i] = new NoCollisionEvent(particles[i + blockStart]);
 
 			// check for particle-wall collision
 			if (wallCollisionTimes[i] < (*temp[i]).getTime() && wallCollisionTimes[i] < 1)
 			{
 				delete(temp[i]);
-				temp[i] = new WallCollisionEvent(particles[blockStart + i], wallCollisionTimes[i]);
+				temp[i] = new WallCollisionEvent(particles[i + blockStart], wallCollisionTimes[i]);
 			}
 
 			// check for particle-particle collision
 			for (int j = 0; j < n; ++j)
 			{
-				if (blockStart + i == j) continue;
+				if (i + blockStart == j) continue;
+
 				double time = particleCollisionTimes[i][j];
-				if (time > -1 && time < (*temp[i]).getTime() && time < 1) {
+				if (time > -1 && time < (*temp[i]).getTime() && time < 1 && !found[j]) {
 					delete(temp[i]);
-					temp[i] = new ParticleCollisionEvent(particles[blockStart + i], particles[j], time);
+					temp[i] = new ParticleCollisionEvent(particles[i + blockStart], particles[j], time);
+					partner[i + blockStart] = j;
 				}
 			}
+		}
+
+		// ~~~ communication ~~~
+		int sendBuffer[blockSize * 5];
+		for (int i = 0; i < blockSize; ++i)
+		{
+			sendBuffer[i] = partners[blockStart + i];
+		}
+		
+		int recvBuffer[n * 5];
+		MPI_Allgather(
+			sendBuffer, 
+			blockSize * 5, 
+			MPI_INT, 
+			recvBuffer, 
+			blockSize * 5, 
+			MPI_INT, 
+			MPI_COMM_WORLD
+		);
+
+		for (int i = 0; i < n; ++i)
+		{
+			partners[i] = recvBuffer[i]; 
+		}
+
+		for (int i = 0; i < blockSize; ++i)
+		{
+			if (found[i]) continue;
+
+			CollisionEvent* e = temp[i];
+
+			// particle-particle collision
+			if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(e))
+			{
+
+				int otherIndex = (*(*v).second).getIndex();
+				if (ParticleCollisionEvent* v2 = dynamic_cast<ParticleCollisionEvent*>(temp[otherIndex]))
+				{
+					if (*v == *v2) 
+					{
+						found[i] = temp[i];
+						++foundCount;
+					}
+				}
+
+			}
+			// particle-wall collision or no collision
+			else
+			{
+				found[i] = temp[i];
+				++foundCount;
+			}
+		}
 	}
+
+
+
 	// apply valid collisions
 	for (int i = 0; i < blockSize; ++i)
 	{
