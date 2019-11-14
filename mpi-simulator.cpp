@@ -123,6 +123,19 @@ class ParticleCollisionEvent: public CollisionEvent
 
 		void execute() 
 		{
+			int blockStart = (n/size) * mpiRank;
+			blockStart += min(n%size, mpiRank);
+			int blockEnd = blockStart + blockSize;
+			// do not execute if
+			// 	1. both particles belongs in the same block and
+			//  2. first particle's index > second particle's index
+			int firstIndex = (*this->first).getIndex();
+			int secondIndex = (*this->second).getIndex();
+			if (firstIndex >= blockStart && firstIndex < blockEnd && secondIndex >= blockStart && secondIndex < blockEnd 
+				&& firstIndex >= secondIndex)
+			{
+				return;
+			}
 			//move them to proper position first
 			first->x += this->time * first->vX;
 			first->y += this->time * first->vY;
@@ -343,9 +356,10 @@ int main (int argc, char **argv)
 	MPI_Bcast(buffer, 4, MPI_INT, MASTER_ID, MPI_COMM_WORLD);
 	n = buffer[0], l = buffer[1], r = buffer[2], s = buffer[3];
 	// TODO: Account for particles belonging in the same block for particle-particle collision
-	blockSize = 1;
-	//blockSize = n/Size;
-	//if (mpiRank < n%size) blockSize++;
+	// blockSize = 1;
+
+	blockSize = n/size;
+	if (mpiRank < n%size) blockSize++;
 	//Allocate space on vector for particles if they are not master
 	if (mpiRank != MASTER_ID)
 	{
@@ -397,10 +411,10 @@ int main (int argc, char **argv)
 
 void moveParticles(vector<Particle*> particles) 
 {
-	int offset = blockSize * mpiRank;
+	int blockStart = (n/size) * mpiRank;
 	//need to modify offset to account for earlier processes getting the extra 1 particle to calculate
-	//offset += min(n%size, mpiRank);
-	printf("%d %d\n", mpiRank, offset);
+	blockStart += min(n%size, mpiRank);
+	// printf("%d %d\n", mpiRank, blockStart);
 
 	// time of particle-particle collisions
 	vector<vector<double>> particleCollisionTimes(blockSize, vector<double>(n, 0));
@@ -413,11 +427,11 @@ void moveParticles(vector<Particle*> particles)
 	// calculate collision times
 	for (int i = 0; i < blockSize; ++i)
 	{
-		wallCollisionTimes[i] = timeWallCollision(*particles[offset + i]);
+		wallCollisionTimes[i] = timeWallCollision(*particles[blockStart + i]);
 
 		for (int j = 0; j < n; ++j)
 		{
-			double particleCollisionTime = timeParticleCollision(*particles[offset + i], *particles[j]);
+			double particleCollisionTime = timeParticleCollision(*particles[blockStart + i], *particles[j]);
 			particleCollisionTimes[i][j] = particleCollisionTime;
 		}
 	}
@@ -426,23 +440,23 @@ void moveParticles(vector<Particle*> particles)
 	for (int i = 0; i < blockSize; ++i)
 	{ 
 			// first assume no collision
-			temp[i] = new NoCollisionEvent(particles[offset + i]);
+			temp[i] = new NoCollisionEvent(particles[blockStart + i]);
 
 			// check for particle-wall collision
 			if (wallCollisionTimes[i] < (*temp[i]).getTime() && wallCollisionTimes[i] < 1)
 			{
 				delete(temp[i]);
-				temp[i] = new WallCollisionEvent(particles[offset + i], wallCollisionTimes[i]);
+				temp[i] = new WallCollisionEvent(particles[blockStart + i], wallCollisionTimes[i]);
 			}
 
 			// check for particle-particle collision
 			for (int j = 0; j < n; ++j)
 			{
-				if (offset + i == j) continue;
+				if (blockStart + i == j) continue;
 				double time = particleCollisionTimes[i][j];
 				if (time > -1 && time < (*temp[i]).getTime() && time < 1) {
 					delete(temp[i]);
-					temp[i] = new ParticleCollisionEvent(particles[offset + i], particles[j], time);
+					temp[i] = new ParticleCollisionEvent(particles[blockStart + i], particles[j], time);
 				}
 			}
 	}
@@ -456,11 +470,11 @@ void moveParticles(vector<Particle*> particles)
 	double sendBuffer[blockSize * 5];
 	for (int i = 0; i < blockSize; ++i)
 	{
-		sendBuffer[i * 5] = particles[offset + i]->i;
-		sendBuffer[i * 5 + 1] = particles[offset + i]->x;
-		sendBuffer[i * 5 + 2] = particles[offset + i]->y;
-		sendBuffer[i * 5 + 3] = particles[offset + i]->vX;
-		sendBuffer[i * 5 + 4] = particles[offset + i]->vY;
+		sendBuffer[i * 5] = particles[blockStart + i]->i;
+		sendBuffer[i * 5 + 1] = particles[blockStart + i]->x;
+		sendBuffer[i * 5 + 2] = particles[blockStart + i]->y;
+		sendBuffer[i * 5 + 3] = particles[blockStart + i]->vX;
+		sendBuffer[i * 5 + 4] = particles[blockStart + i]->vY;
 	}
 	
 	double recvBuffer[n * 5];
