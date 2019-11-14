@@ -13,6 +13,7 @@ using namespace std;
 mt19937 rng;
 random_device rd;
 int n, l, r, s;
+int paddedN;
 int blockSize;
 int mpiRank, size;
 
@@ -123,8 +124,7 @@ class ParticleCollisionEvent: public CollisionEvent
 
 		void execute() 
 		{
-			int blockStart = (n/size) * mpiRank;
-			blockStart += min(n%size, mpiRank);
+			int blockStart = blockSize * mpiRank;
 			int blockEnd = blockStart + blockSize;
 			// do not execute if
 			// 	1. both particles belongs in the same block and
@@ -286,7 +286,7 @@ double timeWallCollision(Particle&);
 
 void sendParticles(vector<Particle *> particles)
 {
-	double buffer[5 * n];
+	double buffer[5 * paddedN];
 	if (mpiRank == MASTER_ID) {
 		for (int i = 0; i < particles.size(); ++i)
 		{
@@ -298,7 +298,7 @@ void sendParticles(vector<Particle *> particles)
 			buffer[i * 5 + 4] = particle->vY;
 		}
 	}
-	MPI_Bcast(buffer, 5 * n, MPI_DOUBLE, MASTER_ID, MPI_COMM_WORLD);
+	MPI_Bcast(buffer, 5 * paddedN, MPI_DOUBLE, MASTER_ID, MPI_COMM_WORLD);
 	if (mpiRank != MASTER_ID) {
 		for (int i = 0; i < particles.size(); ++i)
 		{
@@ -355,16 +355,15 @@ int main (int argc, char **argv)
 	buffer[0] = n, buffer[1] = l, buffer[2] = r, buffer[3] = s;
 	MPI_Bcast(buffer, 4, MPI_INT, MASTER_ID, MPI_COMM_WORLD);
 	n = buffer[0], l = buffer[1], r = buffer[2], s = buffer[3];
-	// TODO: Account for particles belonging in the same block for particle-particle collision
-	// blockSize = 1;
 
-	blockSize = n/size;
-	if (mpiRank < n%size) blockSize++;
+	blockSize = (n-1)/size + 1;
+	paddedN = (n % size == 0) ? n : n + (n-n%size);
 	//Allocate space on vector for particles if they are not master
 	if (mpiRank != MASTER_ID)
 	{
 		for (int i = 0; i < n; i++) particles.push_back(new Particle(0, 0, 0, 0, 0));
 	}
+	for (int i = n; i < paddedN; i++) particles.push_back(new Particle(0, 0, 0, 0, 0));
 	sendParticles(particles);
 	auto start = chrono::high_resolution_clock::now();
 	for (int i = 0; i < s; ++i)
@@ -411,11 +410,10 @@ int main (int argc, char **argv)
 
 void moveParticles(vector<Particle*> particles) 
 {
-	int blockStart = (n/size) * mpiRank;
 	//need to modify offset to account for earlier processes getting the extra 1 particle to calculate
-	blockStart += min(n%size, mpiRank);
-	// printf("%d %d\n", mpiRank, blockStart);
-
+	// For padding solution
+	int blockStart = blockSize * mpiRank;
+		
 	// time of particle-particle collisions
 	vector<vector<double>> particleCollisionTimes(blockSize, vector<double>(n, 0));
 
@@ -425,7 +423,7 @@ void moveParticles(vector<Particle*> particles)
 	vector<CollisionEvent> events;
 
 	// calculate collision times
-	for (int i = 0; i < blockSize; ++i)
+	for (int i = 0; i < blockSize && blockStart + i < n; ++i)
 	{
 		wallCollisionTimes[i] = timeWallCollision(*particles[blockStart + i]);
 
@@ -435,50 +433,21 @@ void moveParticles(vector<Particle*> particles)
 			particleCollisionTimes[i][j] = particleCollisionTime;
 		}
 	}
+	
 	CollisionEvent* temp[blockSize];
-	// find earliest collision
-	// for (int i = 0; i < blockSize; ++i)
-	// { 
-	// 		// first assume no collision
-	// 		temp[i] = new NoCollisionEvent(particles[blockStart + i]);
-
-	// 		// check for particle-wall collision
-	// 		if (wallCollisionTimes[i] < (*temp[i]).getTime() && wallCollisionTimes[i] < 1)
-	// 		{
-	// 			delete(temp[i]);
-	// 			temp[i] = new WallCollisionEvent(particles[blockStart + i], wallCollisionTimes[i]);
-	// 		}
-
-	// 		// check for particle-particle collision
-	// 		for (int j = 0; j < n; ++j)
-	// 		{
-	// 			if (blockStart + i == j) continue;
-	// 			double time = particleCollisionTimes[i][j];
-	// 			if (time > -1 && time < (*temp[i]).getTime() && time < 1) {
-	// 				delete(temp[i]);
-	// 				temp[i] = new ParticleCollisionEvent(particles[blockStart + i], particles[j], time);
-	// 			}
-	// 		}
-	// }
-
-
-
-	// CollisionEvent* found[blockSize] = { nullptr };
-	boolean found[n];
-	for (int i = 0; i < n; ++i) found[i] = false;
-	CollisionEvent* temp[n];
-	int foundCount = 0; // out of n
-	int partners[n];
-	for (int i = 0; i < n; ++i) partners[i] = -1;
-	while (foundCount != n)
+	int found[paddedN];
+	for (int i = 0; i < paddedN; ++i) found[i] = 1;
+	int globalFound = 0;
+	int partners[paddedN];
+	for (int i = 0; i < paddedN; ++i) partners[i] = -1;
+	while (globalFound != n)
 	{
-		for (int i = 0; i < blockSize; ++i)
+		for (int i = 0; i < blockSize && blockStart + i < n; ++i)
 		{
-			if (found[i])
+			if (found[i] == 0)
 			{
 				continue;
 			}
-
 			// first assume no collision
 			temp[i] = new NoCollisionEvent(particles[i + blockStart]);
 
@@ -495,75 +464,79 @@ void moveParticles(vector<Particle*> particles)
 				if (i + blockStart == j) continue;
 
 				double time = particleCollisionTimes[i][j];
-				if (time > -1 && time < (*temp[i]).getTime() && time < 1 && !found[j]) {
+				if (time > -1 && time < temp[i]->getTime() && time < 1 && found[j] != 0) {
 					delete(temp[i]);
 					temp[i] = new ParticleCollisionEvent(particles[i + blockStart], particles[j], time);
-					partner[i + blockStart] = j;
+					partners[i + blockStart] = j;
 				}
 			}
 		}
-
+		
 		// ~~~ communication ~~~
-		int sendBuffer[blockSize * 5];
+		int sendBuffer[blockSize];
 		for (int i = 0; i < blockSize; ++i)
 		{
 			sendBuffer[i] = partners[blockStart + i];
 		}
 		
-		int recvBuffer[n * 5];
 		MPI_Allgather(
 			sendBuffer, 
-			blockSize * 5, 
+			blockSize, 
 			MPI_INT, 
-			recvBuffer, 
-			blockSize * 5, 
+			partners, 
+			blockSize, 
 			MPI_INT, 
 			MPI_COMM_WORLD
 		);
 
-		for (int i = 0; i < n; ++i)
+		for (int i = 0; i < blockSize && i + blockStart < n; ++i)
 		{
-			partners[i] = recvBuffer[i]; 
-		}
-
-		for (int i = 0; i < blockSize; ++i)
-		{
-			if (found[i]) continue;
-
-			CollisionEvent* e = temp[i];
-
-			// particle-particle collision
-			if(ParticleCollisionEvent* v = dynamic_cast<ParticleCollisionEvent*>(e))
+			if (found[i + blockStart] == 0) continue;
+			//if other 'particle' is the wall or no collision, then we can resolve it immediately
+			int otherParticle = partners[i + blockStart];
+			if (otherParticle == -1)
 			{
-
-				int otherIndex = (*(*v).second).getIndex();
-				if (ParticleCollisionEvent* v2 = dynamic_cast<ParticleCollisionEvent*>(temp[otherIndex]))
-				{
-					if (*v == *v2) 
-					{
-						found[i] = temp[i];
-						++foundCount;
-					}
-				}
-
+				found[i + blockStart] = 0;
 			}
-			// particle-wall collision or no collision
 			else
 			{
-				found[i] = temp[i];
-				++foundCount;
+				//otherwise check that other particle's first collision is with this particle and resolve this
+				if (partners[otherParticle] == blockStart + i)
+				{
+					found[i + blockStart] = 0;
+					if (otherParticle >= blockStart && otherParticle < blockStart + blockSize)
+					{
+						found[otherParticle] = 0;
+					}
+				}
 			}
 		}
+		
+		//gather found data
+		MPI_Allgather(
+			&found[blockStart],
+			blockSize,
+			MPI_INT,
+			found,
+			blockSize,
+			MPI_INT,
+			MPI_COMM_WORLD
+		);
+		globalFound = 0;	
+		for (int i = 0; i < n; ++i)
+		{
+			if (found[i] == 0) ++globalFound;
+		}
+		//MPI_Allreduce(&myFound, &globalFound, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 	}
 
-
-
 	// apply valid collisions
-	for (int i = 0; i < blockSize; ++i)
+	for (int i = 0; i < blockSize && blockStart + i < n; ++i)
 	{
 		temp[i]->execute();
 	}
-	for (int i = 0; i < blockSize; ++i) delete(temp[i]);
+
+	for (int i = 0; i < blockSize && i + blockStart < n; ++i) delete(temp[i]);
 
 	double sendBuffer[blockSize * 5];
 	for (int i = 0; i < blockSize; ++i)
@@ -575,7 +548,7 @@ void moveParticles(vector<Particle*> particles)
 		sendBuffer[i * 5 + 4] = particles[blockStart + i]->vY;
 	}
 	
-	double recvBuffer[n * 5];
+	double recvBuffer[paddedN * 5];
 	MPI_Allgather(
 		sendBuffer, 
 		blockSize * 5, 
