@@ -384,8 +384,7 @@ int main (int argc, char **argv)
 	{
 		for (int j = 0; j < n; ++j)
 		{
-			cout << particles[j]->getFullRepresentation() << endl;
-			//cout << s << " " << (string) (*particles[j]) << endl;
+			cout << s << " " << particles[j]->getFullRepresentation() << endl;
 		}
 	}
 
@@ -449,7 +448,7 @@ void moveParticles(vector<Particle*> particles)
 			
 			// first assume no collision
 			if (temp[i] != NULL) delete(temp[i]);
-			partners[i] = -1;
+			partners[i + blockStart] = -1;
 			temp[i] = new NoCollisionEvent(particles[i + blockStart]);
 
 			// check for particle-wall collision
