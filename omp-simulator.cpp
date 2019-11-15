@@ -361,21 +361,22 @@ int main ()
 
 	for (int i = 0; i < s; ++i)
 	{	
-		moveParticles(particles);
 		if (!command.compare("print"))
 		{
 			for (int j = 0; j < particles.size(); ++j)
 			{
 				cout << i << " " << (string) *particles[j] << endl;
 			}
-		}
+		}	
+		moveParticles(particles);
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
 
 	for (int j = 0; j < n; ++j)
 	{
-		cout << particles[j]->getFullRepresentation() << endl;
+		cout << s << " " << (string) *particles[j] << endl;
+		//cout << particles[j]->getFullRepresentation() << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	// printf("Time taken: %.5f s\n", timeTaken);
