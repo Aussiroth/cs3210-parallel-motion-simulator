@@ -382,12 +382,10 @@ int main (int argc, char **argv)
 	}
 	if (mpiRank == MASTER_ID)
 	{
-		if (!command.compare("print"))
+		for (int j = 0; j < n; ++j)
 		{
-			for (int j = 0; j < n; ++j)
-			{
-				cout << s << " " << (string) (*particles[j]) << endl;
-			}
+			cout << particles[j]->getFullRepresentation() << endl;
+			//cout << s << " " << (string) (*particles[j]) << endl;
 		}
 	}
 
@@ -434,7 +432,7 @@ void moveParticles(vector<Particle*> particles)
 		}
 	}
 	
-	CollisionEvent* temp[blockSize];
+	CollisionEvent* temp[blockSize] = {nullptr};
 	int found[paddedN];
 	for (int i = 0; i < paddedN; ++i) found[i] = 1;
 	int globalFound = 0;
@@ -444,11 +442,14 @@ void moveParticles(vector<Particle*> particles)
 	{
 		for (int i = 0; i < blockSize && blockStart + i < n; ++i)
 		{
-			if (found[i] == 0)
+			if (found[i + blockStart] == 0)
 			{
 				continue;
 			}
+			
 			// first assume no collision
+			if (temp[i] != NULL) delete(temp[i]);
+			partners[i] = -1;
 			temp[i] = new NoCollisionEvent(particles[i + blockStart]);
 
 			// check for particle-wall collision
@@ -461,10 +462,9 @@ void moveParticles(vector<Particle*> particles)
 			// check for particle-particle collision
 			for (int j = 0; j < n; ++j)
 			{
-				if (i + blockStart == j) continue;
-
+				if (i + blockStart == j || found[j] == 0) continue;
 				double time = particleCollisionTimes[i][j];
-				if (time > -1 && time < temp[i]->getTime() && time < 1 && found[j] != 0) {
+				if (time > -1 && time < temp[i]->getTime() && time < 1) {
 					delete(temp[i]);
 					temp[i] = new ParticleCollisionEvent(particles[i + blockStart], particles[j], time);
 					partners[i + blockStart] = j;
@@ -504,17 +504,13 @@ void moveParticles(vector<Particle*> particles)
 				if (partners[otherParticle] == blockStart + i)
 				{
 					found[i + blockStart] = 0;
-					if (otherParticle >= blockStart && otherParticle < blockStart + blockSize)
-					{
-						found[otherParticle] = 0;
-					}
 				}
 			}
 		}
-		
+		for (int i = 0; i < blockSize; i++) sendBuffer[i] = found[i + blockStart];	
 		//gather found data
 		MPI_Allgather(
-			&found[blockStart],
+			sendBuffer,
 			blockSize,
 			MPI_INT,
 			found,
@@ -526,6 +522,12 @@ void moveParticles(vector<Particle*> particles)
 		for (int i = 0; i < n; ++i)
 		{
 			if (found[i] == 0) ++globalFound;
+			else 
+			{
+				//printf("%d not found partner\n", i);
+				//printf("the partner in array is %d\n", partners[i]);
+				//printf("the partner's matched status is %d\n", found[partners[i]]);
+			}
 		}
 		//MPI_Allreduce(&myFound, &globalFound, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 	}
