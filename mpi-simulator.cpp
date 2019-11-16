@@ -380,6 +380,8 @@ int main (int argc, char **argv)
 		}
 		moveParticles(particles);	
 	}
+	
+	auto finish = std::chrono::high_resolution_clock::now();
 	if (mpiRank == MASTER_ID)
 	{
 		for (int j = 0; j < n; ++j)
@@ -388,7 +390,6 @@ int main (int argc, char **argv)
 		}
 	}
 
-	auto finish = std::chrono::high_resolution_clock::now();
 	// if (mpiRank == MASTER_ID)
 	// {
 	// 	for (int j = 0; j < n; ++j)
@@ -397,7 +398,7 @@ int main (int argc, char **argv)
 	// 	}
 	// }
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
-	// printf("Time taken: %.5f s\n", timeTaken);
+	if (mpiRank == MASTER_ID) cout << "Time taken: " << timeTaken << "s" << endl;
 
 	MPI_Finalize();
 
@@ -521,14 +522,7 @@ void moveParticles(vector<Particle*> particles)
 		for (int i = 0; i < n; ++i)
 		{
 			if (found[i] == 0) ++globalFound;
-			else 
-			{
-				//printf("%d not found partner\n", i);
-				//printf("the partner in array is %d\n", partners[i]);
-				//printf("the partner's matched status is %d\n", found[partners[i]]);
-			}
 		}
-		//MPI_Allreduce(&myFound, &globalFound, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 	}
 
 	// apply valid collisions
