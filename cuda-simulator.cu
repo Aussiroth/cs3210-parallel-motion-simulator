@@ -233,7 +233,6 @@ __host__ int main (void)
 	auto start = chrono::high_resolution_clock::now();
 	for (int i = 0; i < s; ++i)
 	{
-		moveParticles(particles);
 		if (!command.compare("print"))
 		{
 			for (int j = 0; j < n; ++j)
@@ -241,12 +240,13 @@ __host__ int main (void)
 				cout << i << " " << (string) particles[j] << endl;
 			}
 		}
+		moveParticles(particles);
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
 	for (int j = 0; j < n; ++j)
 	{
-		cout << particles[j].getFullRepresentation() << endl;
+		cout << s << " " << particles[j].getFullRepresentation() << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	// printf("Time taken: %.5f s\n", timeTaken);
