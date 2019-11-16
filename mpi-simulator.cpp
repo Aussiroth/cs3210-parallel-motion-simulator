@@ -368,19 +368,15 @@ int main (int argc, char **argv)
 	auto start = chrono::high_resolution_clock::now();
 	for (int i = 0; i < s; ++i)
 	{
-		if (mpiRank == MASTER_ID)
+		if (mpiRank == MASTER_ID && !command.compare("print"))
 		{
-			if (!command.compare("print"))
+			for (int j = 0; j < n; ++j)
 			{
-				for (int j = 0; j < n; ++j)
-				{
-					cout << i << " " << (string) (*particles[j]) << endl;
-				}
+				cout << i << " " << (string) (*particles[j]) << endl;
 			}
 		}
 		moveParticles(particles);	
 	}
-	
 	auto finish = std::chrono::high_resolution_clock::now();
 	if (mpiRank == MASTER_ID)
 	{
@@ -390,15 +386,8 @@ int main (int argc, char **argv)
 		}
 	}
 
-	// if (mpiRank == MASTER_ID)
-	// {
-	// 	for (int j = 0; j < n; ++j)
-	// 	{
-	// 		cout << particles[j]->getFullRepresentation() << endl;
-	// 	}
-	// }
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
-	if (mpiRank == MASTER_ID) cout << "Time taken: " << timeTaken << "s" << endl;
+	//if (mpiRank == MASTER_ID) cout << "Time taken: " << timeTaken << "s" << endl;
 
 	MPI_Finalize();
 
@@ -472,13 +461,8 @@ void moveParticles(vector<Particle*> particles)
 			}
 		}
 		
-		// ~~~ communication ~~~
 		int sendBuffer[blockSize];
-		for (int i = 0; i < blockSize; ++i)
-		{
-			sendBuffer[i] = partners[blockStart + i];
-		}
-		
+		for (int i = 0; i < blockSize; ++i) sendBuffer[i] = partners[blockStart + i];
 		MPI_Allgather(
 			sendBuffer, 
 			blockSize, 
@@ -519,10 +503,7 @@ void moveParticles(vector<Particle*> particles)
 			MPI_COMM_WORLD
 		);
 		globalFound = 0;	
-		for (int i = 0; i < n; ++i)
-		{
-			if (found[i] == 0) ++globalFound;
-		}
+		for (int i = 0; i < n; ++i) if (found[i] == 0) ++globalFound;
 	}
 
 	// apply valid collisions
