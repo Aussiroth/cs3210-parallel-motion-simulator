@@ -7,8 +7,9 @@ CS3210 Parallel Computing AY19/20 Sem 1
 ```
 │   README.md
 │   a1_report.pdf
-│   omp-simulator.cpp
 |   cuda-simulator.cu
+|   mpi-simulator.cpp
+│   omp-simulator.cpp
 │
 └───input
 │   │   random1000.txt
@@ -34,7 +35,14 @@ CS3210 Parallel Computing AY19/20 Sem 1
 
 ### CUDA
 #### Compilation
-`nvcc cuda-simulator.cu -o cuda-simulator`
+`nvcc cuda-simulator.cu -std=c++11 -o cuda-simulator`
 
 #### Execution
 `./cuda-simulator < input/random1000.txt`
+
+### OpenMPI
+#### Compilation
+`mpic++ mpi-simulator.cpp -std=c++11 -o mpi-simulator`
+
+#### Execution
+`./mpi-simulator -np 2 < input/random1000.txt`
