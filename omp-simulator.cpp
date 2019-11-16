@@ -375,8 +375,7 @@ int main ()
 
 	for (int j = 0; j < n; ++j)
 	{
-		cout << s << " " << (string) *particles[j] << endl;
-		//cout << particles[j]->getFullRepresentation() << endl;
+		cout << s << " " << particles[j]->getFullRepresentation() << endl;
 	}
 	double timeTaken = (double)chrono::duration_cast<chrono::nanoseconds>(finish-start).count()/1000000000;
 	// printf("Time taken: %.5f s\n", timeTaken);
