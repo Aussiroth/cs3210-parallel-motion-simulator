@@ -45,4 +45,4 @@ CS3210 Parallel Computing AY19/20 Sem 1
 `mpic++ mpi-simulator.cpp -std=c++11 -o mpi-simulator`
 
 #### Execution
-`./mpi-simulator -np 2 < input/random1000.txt`
+`mpirun -np 2 ./mpi-simulator < input/random1000.txt`
