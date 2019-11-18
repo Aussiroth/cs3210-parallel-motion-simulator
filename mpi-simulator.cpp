@@ -280,37 +280,10 @@ class NoCollisionEvent: public CollisionEvent
 		}
 };
 
-void moveParticles(vector<Particle*> particles);
+void sendParticles(vector<Particle *>);
+void moveParticles(vector<Particle*>);
 double timeParticleCollision(Particle&, Particle&);
 double timeWallCollision(Particle&);
-
-void sendParticles(vector<Particle *> particles)
-{
-	double buffer[5 * paddedN];
-	if (mpiRank == MASTER_ID) {
-		for (int i = 0; i < particles.size(); ++i)
-		{
-			Particle* particle = particles[i];
-			buffer[i * 5] = particle->i;
-			buffer[i * 5 + 1] = particle->x;
-			buffer[i * 5 + 2] = particle->y;
-			buffer[i * 5 + 3] = particle->vX;
-			buffer[i * 5 + 4] = particle->vY;
-		}
-	}
-	MPI_Bcast(buffer, 5 * paddedN, MPI_DOUBLE, MASTER_ID, MPI_COMM_WORLD);
-	if (mpiRank != MASTER_ID) {
-		for (int i = 0; i < particles.size(); ++i)
-		{
-			Particle* particle = particles[i];
-			particle->i = buffer[i * 5]; 
-			particle->x = buffer[i * 5 + 1];
-			particle->y = buffer[i * 5 + 2];
-			particle->vX = buffer[i * 5 + 3];
-			particle->vY = buffer[i * 5 + 4];
-		}
-	}
-}
 
 int main (int argc, char **argv)
 {
@@ -397,8 +370,7 @@ int main (int argc, char **argv)
 
 void moveParticles(vector<Particle*> particles) 
 {
-	//need to modify offset to account for earlier processes getting the extra 1 particle to calculate
-	// For padding solution
+	// index of first particle in process block
 	int blockStart = blockSize * mpiRank;
 		
 	// time of particle-particle collisions
@@ -406,8 +378,6 @@ void moveParticles(vector<Particle*> particles)
 
 	// time of particle-wall collisions
 	vector<double> wallCollisionTimes(blockSize, 0);
-
-	vector<CollisionEvent> events;
 
 	// calculate collision times
 	for (int i = 0; i < blockSize && blockStart + i < n; ++i)
@@ -421,12 +391,17 @@ void moveParticles(vector<Particle*> particles)
 		}
 	}
 	
+	//
 	CollisionEvent* temp[blockSize] = {nullptr};
+	
 	int found[paddedN];
 	for (int i = 0; i < paddedN; ++i) found[i] = 1;
+
 	int globalFound = 0;
+	
 	int partners[paddedN];
 	for (int i = 0; i < paddedN; ++i) partners[i] = -1;
+	
 	while (globalFound != n)
 	{
 		for (int i = 0; i < blockSize && blockStart + i < n; ++i)
@@ -461,6 +436,7 @@ void moveParticles(vector<Particle*> particles)
 			}
 		}
 		
+		// gather information about each particle's partner
 		int sendBuffer[blockSize];
 		for (int i = 0; i < blockSize; ++i) sendBuffer[i] = partners[blockStart + i];
 		MPI_Allgather(
@@ -491,8 +467,8 @@ void moveParticles(vector<Particle*> particles)
 				}
 			}
 		}
+		// gather valid collisions
 		for (int i = 0; i < blockSize; i++) sendBuffer[i] = found[i + blockStart];	
-		//gather found data
 		MPI_Allgather(
 			sendBuffer,
 			blockSize,
@@ -514,6 +490,7 @@ void moveParticles(vector<Particle*> particles)
 
 	for (int i = 0; i < blockSize && i + blockStart < n; ++i) delete(temp[i]);
 
+	// gather final particle information after collision
 	double sendBuffer[blockSize * 5];
 	for (int i = 0; i < blockSize; ++i)
 	{
@@ -543,6 +520,35 @@ void moveParticles(vector<Particle*> particles)
 		particle->y = recvBuffer[i * 5 + 2];
 		particle->vX = recvBuffer[i * 5 + 3];
 		particle->vY = recvBuffer[i * 5 + 4];
+	}
+}
+
+// broadcasts all particles if process is master
+void sendParticles(vector<Particle *> particles)
+{
+	double buffer[5 * paddedN];
+	if (mpiRank == MASTER_ID) {
+		for (int i = 0; i < particles.size(); ++i)
+		{
+			Particle* particle = particles[i];
+			buffer[i * 5] = particle->i;
+			buffer[i * 5 + 1] = particle->x;
+			buffer[i * 5 + 2] = particle->y;
+			buffer[i * 5 + 3] = particle->vX;
+			buffer[i * 5 + 4] = particle->vY;
+		}
+	}
+	MPI_Bcast(buffer, 5 * paddedN, MPI_DOUBLE, MASTER_ID, MPI_COMM_WORLD);
+	if (mpiRank != MASTER_ID) {
+		for (int i = 0; i < particles.size(); ++i)
+		{
+			Particle* particle = particles[i];
+			particle->i = buffer[i * 5]; 
+			particle->x = buffer[i * 5 + 1];
+			particle->y = buffer[i * 5 + 2];
+			particle->vX = buffer[i * 5 + 3];
+			particle->vY = buffer[i * 5 + 4];
+		}
 	}
 }
 

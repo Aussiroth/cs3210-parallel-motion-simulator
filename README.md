@@ -2,11 +2,17 @@
 **Au Liang Jun (A0173593W), Yan Hong Yao Alvin (A0159960R)**  
 CS3210 Parallel Computing AY19/20 Sem 1
 
+---
+**NOTE**
+
+Our OpenMP and CUDA implementations have been updated to fix a bug in Assignment 1 Part 1 and to follow the output format specified more closely.
+
+---
 
 ## Directory
 ```
 │   README.md
-│   a1_report.pdf
+│   a2_report.pdf
 |   cuda-simulator.cu
 |   mpi-simulator.cpp
 │   omp-simulator.cpp
